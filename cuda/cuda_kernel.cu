@@ -661,3 +661,16 @@ template struct ConvamFilterGradFunctor<GPUDevice, float>;
 template struct ConvamFilterGradFunctor<GPUDevice, int32>;
 template struct ConvamFunctor<GPUDevice, float>;
 template struct ConvamFunctor<GPUDevice, int32>;
+
+template __global__ void gemm<float>(size_t m, size_t n, size_t k,
+    const float *a, size_t lda, const float *b, size_t ldb,
+   float *c, size_t ldc, cudaTextureObject_t mant_lut,
+   uint32_t mant_mask, uint8_t a_shift, uint8_t b_shift, uint8_t mant_bitwidth);
+
+template __global__ void gemm<int32>(size_t m, size_t n, size_t k,
+    const int32 *a, size_t lda, const int32 *b, size_t ldb,
+   int32 *c, size_t ldc, cudaTextureObject_t mant_lut,
+   uint32_t mant_mask, uint8_t a_shift, uint8_t b_shift, uint8_t mant_bitwidth);
+
+template __global__ void reverseNswapdim23<float>(size_t height, size_t width, size_t n_channels, size_t n_filters, float* dest, const float* src );
+template __global__ void reverseNswapdim23<int32>(size_t height, size_t width, size_t n_channels, size_t n_filters, int32* dest, const int32* src );

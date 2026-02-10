@@ -21,7 +21,7 @@ from tensorflow.python.keras import constraints
 from tensorflow.python.keras import initializers
 from tensorflow.python.keras import regularizers
 from tensorflow.python.keras.engine import keras_tensor
-from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.keras.layers import Layer
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import embedding_ops
@@ -35,7 +35,7 @@ from tensorflow.python.ops import variable_scope
 from tensorflow.python.ops.ragged import ragged_getitem
 from tensorflow.python.ops.ragged import ragged_tensor
 from tensorflow.python.platform import tf_logging
-from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.trackable import base as trackable
 from tensorflow.python.util import dispatch
 from tensorflow.python.util import nest
 from tensorflow.python.util import tf_decorator
@@ -43,7 +43,7 @@ from tensorflow.python.util.tf_export import get_canonical_name_for_symbol
 from tensorflow.python.util.tf_export import get_symbol_from_name
 from tensorflow.python.util.tf_export import keras_export
 import tensorflow
-amdense_module = tensorflow.load_op_library('./denseam_gpu.so')
+amdense_module = tensorflow.load_op_library('./denseam.so')
 class denseam(Layer):
   """Just your regular densely-connected NN layer.
 
@@ -157,7 +157,7 @@ class denseam(Layer):
                        'should be defined. Found `None`.')
     self.input_spec = InputSpec(min_ndim=2, axes={-1: last_dim})
     self.kernel = self.add_weight(
-        'kernel',
+        name='kernel',
         shape=[last_dim, self.units],
         initializer=self.kernel_initializer,
         regularizer=self.kernel_regularizer,
@@ -166,7 +166,7 @@ class denseam(Layer):
         trainable=True)
     if self.use_bias:
       self.bias = self.add_weight(
-          'bias',
+          name='bias',
           shape=[self.units,],
           initializer=self.bias_initializer,
           regularizer=self.bias_regularizer,
@@ -178,8 +178,9 @@ class denseam(Layer):
     self.built = True
 
   def call(self, inputs):
-    if inputs.dtype.base_dtype != self._compute_dtype_object.base_dtype:
-      inputs = math_ops.cast(inputs, dtype=self._compute_dtype_object)
+    compute_dtype = dtypes.as_dtype(self.compute_dtype)
+    if inputs.dtype.base_dtype != compute_dtype.base_dtype:
+      inputs = math_ops.cast(inputs, dtype=compute_dtype)
 
     rank = inputs.shape.rank
     if rank == 2 or rank is None:

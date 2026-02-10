@@ -37,7 +37,7 @@ from tensorflow.python.util.deprecation import deprecated_argument_lookup
 
 from tensorflow.python.util.tf_export import tf_export
 import tensorflow as tf
-convam_module = tf.load_op_library('./convam_gpu.so')
+convam_module = tf.load_op_library('./convam.so')
 
 _CHANNELS_LAST_FORMATS = frozenset({
     "NWC", "NHC", "NHWC", "NWHC", "NDHWC", "NDWHC", "NHDWC", "NHWDC", "NWDHC",
@@ -128,7 +128,7 @@ def amconvolution_internal(
       not tensor_util.is_tf_type(filters)):
     with ops.name_scope("convolution_internal", None, [filters, input]):
       filters = ops.convert_to_tensor(filters, name='filters')
-  if (not isinstance(input, ops.Tensor) and not tensor_util.is_tf_type(input)):
+  if (not isinstance(input, tf.Tensor) and not tensor_util.is_tf_type(input)):
     with ops.name_scope("convolution_internal", None, [filters, input]):
       input = ops.convert_to_tensor(input, name="input")
 

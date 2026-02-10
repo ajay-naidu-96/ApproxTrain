@@ -1,0 +1,22 @@
+name: approxtrain
+channels:
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - cuda-toolkit
+  - gxx_linux-64
+  - make
+  - cmake
+  - hdf5
+  - numpy
+  - scipy
+  - matplotlib
+  - h5py
+  - protobuf
+  - six
+  - pip:
+      - "tensorflow[and-cuda]==2.18.0"
+      - tensorflow-datasets

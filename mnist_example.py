@@ -4,6 +4,7 @@ import sys
 from python.keras.layers.am_convolutional import AMConv2D
 from python.keras.layers.amdenselayer import denseam
 tf.random.set_seed(0)
+tf.config.optimizer.set_jit(False) # Disable XLA JIT to avoid custom op compilation errors
 
 (ds_train, ds_test), ds_info = tfds.load(
     'mnist',
@@ -48,6 +49,7 @@ model.compile(
     optimizer=tf.keras.optimizers.Adam(0.001),
     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
     metrics=[tf.keras.metrics.SparseCategoricalAccuracy()],
+    jit_compile=False,
 )
 
 model.fit(

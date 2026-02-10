@@ -21,12 +21,12 @@ limitations under the License.
 #include <algorithm>
 
 #include "absl/base/casts.h"
-#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/platform/logging.h"
 #include "tensorflow/core/platform/stream_executor.h"
 #include "tensorflow/core/platform/types.h"
 #include "tensorflow/core/util/gpu_cuda_alias.h"
+#include <unsupported/Eigen/CXX11/Tensor>
 
 // Usage of GetGpuLaunchConfig, GetGpu2DLaunchConfig, and
 // GetGpu3DLaunchConfig:
@@ -125,7 +125,7 @@ CREATE_CUDA_TYPE_ALIAS(GpuLaunchConfig, CudaLaunchConfig);
 // memory-limited.
 // REQUIRES: work_element_count > 0.
 inline GpuLaunchConfig GetGpuLaunchConfig(int work_element_count,
-                                          const Eigen::GpuDevice& d) {
+                                          const Eigen::GpuDevice &d) {
   CHECK_GT(work_element_count, 0);
   GpuLaunchConfig config;
   const int virtual_thread_count = work_element_count;
@@ -144,7 +144,7 @@ inline GpuLaunchConfig GetGpuLaunchConfig(int work_element_count,
 }
 #ifndef TENSORFLOW_USE_ROCM
 inline CudaLaunchConfig GetCudaLaunchConfig(int work_element_count,
-                                            const Eigen::GpuDevice& d) {
+                                            const Eigen::GpuDevice &d) {
   return GetGpuLaunchConfig(work_element_count, d);
 }
 #endif
@@ -154,7 +154,7 @@ inline CudaLaunchConfig GetCudaLaunchConfig(int work_element_count,
 // REQUIRES: work_element_count > 0.
 template <typename DeviceFunc>
 GpuLaunchConfig GetGpuLaunchConfig(int work_element_count,
-                                   const Eigen::GpuDevice& d, DeviceFunc func,
+                                   const Eigen::GpuDevice &d, DeviceFunc func,
                                    size_t dynamic_shared_memory_size,
                                    int block_size_limit) {
   CHECK_GT(work_element_count, 0);
@@ -190,7 +190,7 @@ CREATE_CUDA_HOST_FUNCTION_ALIAS(GetGpuLaunchConfig, GetCudaLaunchConfig);
 // REQUIRES: work_element_count > 0.
 template <typename DeviceFunc>
 GpuLaunchConfig GetGpuLaunchConfigFixedBlockSize(
-    int work_element_count, const Eigen::GpuDevice& d, DeviceFunc func,
+    int work_element_count, const Eigen::GpuDevice &d, DeviceFunc func,
     size_t dynamic_shared_memory_size, int fixed_block_size) {
   CHECK_GT(work_element_count, 0);
   GpuLaunchConfig config;
@@ -224,7 +224,7 @@ struct Gpu2DLaunchConfig {
 CREATE_CUDA_TYPE_ALIAS(Gpu2DLaunchConfig, Cuda2DLaunchConfig);
 
 inline Gpu2DLaunchConfig GetGpu2DLaunchConfig(int xdim, int ydim,
-                                              const Eigen::GpuDevice& d) {
+                                              const Eigen::GpuDevice &d) {
   Gpu2DLaunchConfig config;
 
   if (xdim <= 0 || ydim <= 0) {
@@ -252,7 +252,7 @@ inline Gpu2DLaunchConfig GetGpu2DLaunchConfig(int xdim, int ydim,
 }
 #ifndef TENSORFLOW_USE_ROCM
 inline Cuda2DLaunchConfig GetCuda2DLaunchConfig(int xdim, int ydim,
-                                                const Eigen::GpuDevice& d) {
+                                                const Eigen::GpuDevice &d) {
   return GetGpu2DLaunchConfig(xdim, ydim, d);
 }
 #endif
@@ -264,11 +264,10 @@ using Gpu3DLaunchConfig = Gpu2DLaunchConfig;
 CREATE_CUDA_TYPE_ALIAS(Gpu3DLaunchConfig, Cuda3DLaunchConfig);
 
 template <typename DeviceFunc>
-Gpu3DLaunchConfig GetGpu3DLaunchConfig(int xdim, int ydim, int zdim,
-                                       const Eigen::GpuDevice& d,
-                                       DeviceFunc func,
-                                       size_t dynamic_shared_memory_size,
-                                       int block_size_limit) {
+Gpu3DLaunchConfig
+GetGpu3DLaunchConfig(int xdim, int ydim, int zdim, const Eigen::GpuDevice &d,
+                     DeviceFunc func, size_t dynamic_shared_memory_size,
+                     int block_size_limit) {
   Gpu3DLaunchConfig config;
 
   if (xdim <= 0 || ydim <= 0 || zdim <= 0) {
@@ -336,11 +335,10 @@ Gpu3DLaunchConfig GetGpu3DLaunchConfig(int xdim, int ydim, int zdim,
 CREATE_CUDA_HOST_FUNCTION_ALIAS(GetGpu3DLaunchConfig, GetCuda3DLaunchConfig);
 
 template <typename DeviceFunc>
-Gpu2DLaunchConfig GetGpu2DLaunchConfig(int xdim, int ydim,
-                                       const Eigen::GpuDevice& d,
-                                       DeviceFunc func,
-                                       size_t dynamic_shared_memory_size,
-                                       int block_size_limit) {
+Gpu2DLaunchConfig
+GetGpu2DLaunchConfig(int xdim, int ydim, const Eigen::GpuDevice &d,
+                     DeviceFunc func, size_t dynamic_shared_memory_size,
+                     int block_size_limit) {
   return GetGpu3DLaunchConfig(xdim, ydim, 1, d, func,
                               dynamic_shared_memory_size, block_size_limit);
 }
@@ -348,40 +346,38 @@ CREATE_CUDA_HOST_FUNCTION_ALIAS(GetGpu2DLaunchConfig, GetCuda2DLaunchConfig);
 
 #if GOOGLE_CUDA
 template <typename DeviceFunc>
-Cuda2DLaunchConfig GetCuda2DLaunchConfig(int xdim, int ydim,
-                                         const Eigen::GpuDevice& d,
-                                         DeviceFunc func,
-                                         size_t dynamic_shared_memory_size,
-                                         int block_size_limit) {
+Cuda2DLaunchConfig
+GetCuda2DLaunchConfig(int xdim, int ydim, const Eigen::GpuDevice &d,
+                      DeviceFunc func, size_t dynamic_shared_memory_size,
+                      int block_size_limit) {
   return GetGpu2DLaunchConfig(xdim, ydim, d, func, dynamic_shared_memory_size,
                               block_size_limit);
 }
-#endif  // GOOGLE_CUDA
+#endif // GOOGLE_CUDA
 
 namespace detail {
 template <typename... Ts, size_t... Is>
-std::array<void*, sizeof...(Ts)> GetArrayOfElementPointersImpl(
-    std::tuple<Ts...>* tuple, absl::index_sequence<Is...>) {
+std::array<void *, sizeof...(Ts)>
+GetArrayOfElementPointersImpl(std::tuple<Ts...> *tuple,
+                              absl::index_sequence<Is...>) {
   return {{&std::get<Is>(*tuple)...}};
 }
 // Returns an array of void pointers to the elements of the given tuple.
 template <typename... Ts>
-std::array<void*, sizeof...(Ts)> GetArrayOfElementPointers(
-    std::tuple<Ts...>* tuple) {
+std::array<void *, sizeof...(Ts)>
+GetArrayOfElementPointers(std::tuple<Ts...> *tuple) {
   return GetArrayOfElementPointersImpl(tuple,
                                        absl::index_sequence_for<Ts...>{});
 }
 
-template <bool...>
-struct BoolPack;
+template <bool...> struct BoolPack;
 template <bool... Bs>
 using NoneTrue = std::is_same<BoolPack<Bs..., false>, BoolPack<false, Bs...>>;
 // Returns whether none of the types in Ts is a reference.
-template <typename... Ts>
-constexpr bool NoneIsReference() {
+template <typename... Ts> constexpr bool NoneIsReference() {
   return NoneTrue<(std::is_reference<Ts>::value)...>::value;
 }
-}  // namespace detail
-}  // namespace tensorflow
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-#endif  // TENSORFLOW_CORE_UTIL_GPU_LAUNCH_CONFIG_H_
+} // namespace detail
+} // namespace tensorflow
+#endif // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif // TENSORFLOW_CORE_UTIL_GPU_LAUNCH_CONFIG_H_

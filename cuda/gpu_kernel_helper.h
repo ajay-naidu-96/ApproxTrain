@@ -23,8 +23,8 @@ limitations under the License.
 #if GOOGLE_CUDA
 #include <cuda_fp16.h>
 #endif
-#include "tensorflow/core/util/gpu_cuda_alias.h"
 #include "gpu_device_functions.h"
+#include "tensorflow/core/util/gpu_cuda_alias.h"
 #include "tensorflow/core/util/gpu_launch_config.h"
 
 #if GOOGLE_CUDA
@@ -34,15 +34,15 @@ limitations under the License.
 #endif
 
 // Deprecated, use 'for(int i : GpuGridRangeX(n))' instead.
-#define GPU_1D_KERNEL_LOOP(i, n) \
+#define GPU_1D_KERNEL_LOOP(i, n)                                               \
   for (int i : ::tensorflow::GpuGridRangeX<int>(n))
-#define CUDA_1D_KERNEL_LOOP(i, n) \
+#define CUDA_1D_KERNEL_LOOP(i, n)                                              \
   for (int i : ::tensorflow::GpuGridRangeX<int>(n))
 
 // Deprecated, use 'for(int i : GpuGridRange?(n))' instead.
-#define GPU_AXIS_KERNEL_LOOP(i, n, axis) \
+#define GPU_AXIS_KERNEL_LOOP(i, n, axis)                                       \
   for (int i : ::tensorflow::GpuGridRange##axis<int>(n))
-#define CUDA_AXIS_KERNEL_LOOP(i, n, axis) \
+#define CUDA_AXIS_KERNEL_LOOP(i, n, axis)                                      \
   for (int i : ::tensorflow::GpuGridRange##axis<int>(n))
 
 #if GOOGLE_CUDA
@@ -58,12 +58,13 @@ using gpuError_t = hipError_t;
 // macro wrapper to declare dynamic shared memory
 #if GOOGLE_CUDA
 
-#define GPU_DYNAMIC_SHARED_MEM_DECL(ALIGN, TYPE, NAME) \
-  extern __shared__ __align__(ALIGN) TYPE NAME[]
+#define GPU_DYNAMIC_SHARED_MEM_DECL(ALIGN, TYPE, NAME)                         \
+  extern __shared__ __align__(ALIGN)                                           \
+  TYPE NAME[]
 
 #elif TENSORFLOW_USE_ROCM
 
-#define GPU_DYNAMIC_SHARED_MEM_DECL(ALIGN, TYPE, NAME) \
+#define GPU_DYNAMIC_SHARED_MEM_DECL(ALIGN, TYPE, NAME)                         \
   HIP_DYNAMIC_SHARED(TYPE, NAME)
 
 #endif
@@ -72,12 +73,12 @@ namespace tensorflow {
 
 #if GOOGLE_CUDA
 // cudaGetErrorString is available to both host and device
-__host__ __device__ inline const char* GpuGetErrorString(cudaError_t error) {
+__host__ __device__ inline const char *GpuGetErrorString(cudaError_t error) {
   return cudaGetErrorString(error);
 }
 #elif TENSORFLOW_USE_ROCM
 // hipGetErrorString is available on host side only
-inline const char* GpuGetErrorString(hipError_t error) {
+inline const char *GpuGetErrorString(hipError_t error) {
   return hipGetErrorString(error);
 }
 #endif
@@ -85,13 +86,9 @@ inline const char* GpuGetErrorString(hipError_t error) {
 // Returns a raw reference to the current cuda stream. Required by a
 // number of kernel calls (for which StreamInterface* does not work),
 // i.e. CUB and certain cublas primitives.
-inline const gpuStream_t& GetGpuStream(OpKernelContext* context) {
-  const gpuStream_t* ptr = CHECK_NOTNULL(
-      reinterpret_cast<const gpuStream_t*>(context->op_device_context()
-                                               ->stream()
-                                               ->implementation()
-                                               ->GpuStreamMemberHack()));
-  return *ptr;
+inline const gpuStream_t &GetGpuStream(OpKernelContext *context) {
+  const Eigen::GpuDevice &device = context->eigen_device<Eigen::GpuDevice>();
+  return device.stream();
 }
 
 // Launches a GPU kernel through cudaLaunchKernel in CUDA environment, or
@@ -105,7 +102,7 @@ Status GpuLaunchKernel(void (*function)(Ts...), dim3 grid_dim, dim3 block_dim,
   static_assert(detail::NoneIsReference<Ts...>(),
                 "Kernels with reference arguments have undefined behaviour.");
 #if GOOGLE_CUDA
-  auto func_ptr = absl::bit_cast<const void*>(function);
+  auto func_ptr = absl::bit_cast<const void *>(function);
   // Cast arguments and forward them as an array of pointers.
   auto args_tuple = std::tuple<Ts...>(arguments...);
   auto arg_ptrs = detail::GetArrayOfElementPointers(&args_tuple);
@@ -118,37 +115,36 @@ Status GpuLaunchKernel(void (*function)(Ts...), dim3 grid_dim, dim3 block_dim,
   hipLaunchKernelGGL(function, grid_dim, block_dim, shared_memory_size_bytes,
                      stream, std::forward<Args>(arguments)...);
 #endif
-  return Status::OK();
+  return absl::OkStatus();
 }
 
 // Perfect forwarding to make CudaLaunchKernel available to both ROCm and CUDA
 // builds
 template <typename... Args>
-auto CudaLaunchKernel(Args&&... args)
+auto CudaLaunchKernel(Args &&...args)
     -> decltype(GpuLaunchKernel(std::forward<Args>(args)...)) {
   return GpuLaunchKernel(std::forward<Args>(args)...);
 }
 
-__host__ __device__ inline tensorflow::bfloat16 GpuLdg(
-    const tensorflow::bfloat16* address) {
+__host__ __device__ inline tensorflow::bfloat16
+GpuLdg(const tensorflow::bfloat16 *address) {
   tensorflow::bfloat16 return_value;
-  return_value.value = GpuLdg(reinterpret_cast<const uint16_t*>(address));
+  return_value.value = GpuLdg(reinterpret_cast<const uint16_t *>(address));
   return return_value;
 }
 // Already aliased in gpu_device_functions.h
 
-template <typename T>
-__host__ __device__ inline T ldg(const T* ptr) {
+template <typename T> __host__ __device__ inline T ldg(const T *ptr) {
   return GpuLdg(ptr);
 }
 
 template <typename T>
-__host__ __device__ inline const T& tf_min(const T& x, const T& y) {
+__host__ __device__ inline const T &tf_min(const T &x, const T &y) {
   return x < y ? x : y;
 }
 
 template <typename T>
-__host__ __device__ inline const T& tf_max(const T& x, const T& y) {
+__host__ __device__ inline const T &tf_max(const T &x, const T &y) {
   return x < y ? y : x;
 }
 
@@ -176,22 +172,25 @@ __device__ inline Eigen::half GpuShuffleSync(unsigned mask, Eigen::half value,
 }
 // Aliased in gpu_device_functions.h
 
-__device__ EIGEN_ALWAYS_INLINE Eigen::half GpuShuffleUpSync(
-    unsigned mask, Eigen::half value, int delta, int width = warpSize) {
+__device__ EIGEN_ALWAYS_INLINE Eigen::half
+GpuShuffleUpSync(unsigned mask, Eigen::half value, int delta,
+                 int width = warpSize) {
   return Eigen::half(
       GpuShuffleUpSync(mask, static_cast<uint16>(value), delta, width));
 }
 // Aliased in gpu_device_functions.h
 
-__device__ EIGEN_ALWAYS_INLINE Eigen::half GpuShuffleDownSync(
-    unsigned mask, Eigen::half value, int delta, int width = warpSize) {
+__device__ EIGEN_ALWAYS_INLINE Eigen::half
+GpuShuffleDownSync(unsigned mask, Eigen::half value, int delta,
+                   int width = warpSize) {
   return Eigen::half(
       GpuShuffleDownSync(mask, static_cast<uint16>(value), delta, width));
 }
 // Aliased in gpu_device_functions.h
 
-__device__ EIGEN_ALWAYS_INLINE Eigen::half GpuShuffleXorSync(
-    unsigned mask, Eigen::half value, int lane_mask, int width = warpSize) {
+__device__ EIGEN_ALWAYS_INLINE Eigen::half
+GpuShuffleXorSync(unsigned mask, Eigen::half value, int lane_mask,
+                  int width = warpSize) {
   return Eigen::half(
       GpuShuffleXorSync(mask, static_cast<uint16>(value), lane_mask, width));
 }
@@ -206,9 +205,8 @@ __device__ EIGEN_ALWAYS_INLINE Eigen::half GpuShuffleXorSync(
 
 // Represents an aligned array of N elements of T. Data pointers can be
 // reinterpreted as this type to generate vectorized loads/stores in a kernel.
-template <typename T, int N>
-class alignas(alignof(T) * N) AlignedVector {
- public:
+template <typename T, int N> class alignas(alignof(T) * N) AlignedVector {
+public:
   typedef T value_type;
   static constexpr const int kSize = N;
 
@@ -229,7 +227,7 @@ class alignas(alignof(T) * N) AlignedVector {
     UNROLL_ON_DEVICE for (int i = 0; i < kSize; ++i) { values_[i] = uniform; }
   }
 
- private:
+private:
   value_type values_[N];
 };
 
@@ -241,8 +239,7 @@ inline int64 alignment_of(int64 element_stride) {
   return element_stride & -element_stride;
 }
 
-template <typename T>
-inline int64 alignment_of(T* ptr) {
+template <typename T> inline int64 alignment_of(T *ptr) {
   const intptr_t ptr_val = reinterpret_cast<std::uintptr_t>(ptr);
   // Pointers should always be aligned to sizeof(T) bytes.
   DCHECK_EQ(ptr_val % sizeof(T), 0);
@@ -250,8 +247,7 @@ inline int64 alignment_of(T* ptr) {
   return alignment_of(ptr_val / sizeof(T));
 }
 
-template <typename... Args>
-int64 MinAlignmentOf(Args... args) {
+template <typename... Args> int64 MinAlignmentOf(Args... args) {
   return std::min({alignment_of(args)...});
 }
 
@@ -259,7 +255,7 @@ int64 MinAlignmentOf(Args... args) {
 // vector instruction size for type T that is <= max_vec_size. The max_vec_size
 // argument should be set to the minimum alignment of all relevant parameters.
 template <typename T, template <int vec_size> class Functor, typename... Args>
-Status DispatchToVectorized(int64 max_vec_size, Args&&... args) {
+Status DispatchToVectorized(int64 max_vec_size, Args &&...args) {
   constexpr const int kOptimalVecSizeBytes = 16;
   // The optimal number of (aligned) elements of T to load/store in a
   // single instruction inside a kernel.
@@ -281,9 +277,9 @@ Status DispatchToVectorized(int64 max_vec_size, Args&&... args) {
 
 namespace gpu_helper {
 template <typename T, typename OutType = int32>
-__device__ OutType upper_bound(const T* first, OutType count, T val) {
-  const T* orig = first;
-  const T* it = nullptr;
+__device__ OutType upper_bound(const T *first, OutType count, T val) {
+  const T *orig = first;
+  const T *it = nullptr;
   OutType step = 0;
   while (count > 0) {
     it = first;
@@ -301,9 +297,9 @@ __device__ OutType upper_bound(const T* first, OutType count, T val) {
 }
 
 template <typename T, typename OutType = int32>
-__device__ OutType lower_bound(const T* first, OutType count, T val) {
-  const T* orig = first;
-  const T* it = nullptr;
+__device__ OutType lower_bound(const T *first, OutType count, T val) {
+  const T *orig = first;
+  const T *it = nullptr;
   OutType step = 0;
   while (count > 0) {
     it = first;
@@ -320,13 +316,13 @@ __device__ OutType lower_bound(const T* first, OutType count, T val) {
   return first - orig;
 }
 
-}  // namespace gpu_helper
+} // namespace gpu_helper
 
 #ifndef TENSORFLOW_USE_ROCM
 namespace cuda_helper = gpu_helper;
 #endif
 
-}  // namespace tensorflow
+} // namespace tensorflow
 
-#endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
-#endif  // TENSORFLOW_CORE_UTIL_GPU_KERNEL_HELPER_H_
+#endif // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
+#endif // TENSORFLOW_CORE_UTIL_GPU_KERNEL_HELPER_H_
