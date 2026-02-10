@@ -4,7 +4,8 @@ from tensorflow.keras.backend import softmax
 from python.keras.layers.amdenselayer import denseam
 from python.ops.math_ops import matmulam
 import os
-mul=os.environ['mul']
+# No longer using global 'mul' as it is captured at import time.
+# We will use 'lut_file' to determine the multiplier type at runtime.
 # Implementing the Scaled-Dot Product Attention
 class DotProductAttention(Layer):
     def __init__(self, lut_file, **kwargs):
@@ -12,7 +13,7 @@ class DotProductAttention(Layer):
         self.lut_file = lut_file
     def call(self, queries, keys, values, d_k, mask=None):
         # Scoring the queries against the keys after transposing the latter, and scaling
-        if mul == "FP32":
+        if self.lut_file is None:
             scores = matmul(queries, keys, transpose_b=True) / math.sqrt(cast(d_k, float32))
         else:
             scores = matmulam(queries, keys, transpose_b=True, mant_mul_lut=self.lut_file) / math.sqrt(cast(d_k, float32))
@@ -25,7 +26,7 @@ class DotProductAttention(Layer):
         weights = softmax(scores)
 
         # Computing the attention by a weighted sum of the value vectors
-        if mul == "FP32":
+        if self.lut_file is None:
             return matmul(weights, values)
         return matmulam(weights, values, mant_mul_lut=self.lut_file)
 
@@ -38,7 +39,7 @@ class MultiHeadAttention(Layer):
         self.d_k = d_k  # Dimensionality of the linearly projected queries and keys
         self.d_v = d_v  # Dimensionality of the linearly projected values
         self.d_model = d_model  # Dimensionality of the model
-        if mul == "FP32":
+        if lut_file is None:
             self.W_q = Dense(d_k)   # Learned projection matrix for the queries
             self.W_k = Dense(d_k)   # Learned projection matrix for the keys
             self.W_v = Dense(d_v)   # Learned projection matrix for the values
@@ -77,7 +78,7 @@ class MultiHeadAttention(Layer):
 
         # Compute the multi-head attention output using the reshaped queries,
         # keys, and values
-        o_reshaped = self.attention(q_reshaped, k_reshaped, v_reshaped, self.d_k, mask)
+        o_reshaped = self.attention(q_reshaped, keys=k_reshaped, values=v_reshaped, d_k=self.d_k, mask=mask)
         # Resulting tensor shape: (batch_size, heads, input_seq_length, -1)
 
         # Rearrange back the output into concatenated form

@@ -87,13 +87,19 @@ all: $(CONV_BINARY) $(DENSE_BINARY) $(MATMUL_BINARY)
 
 # Aliases
 convam: $(CONV_BINARY)
+	@:
 denseam: $(DENSE_BINARY)
+	@:
 matmulam: $(MATMUL_BINARY)
+	@:
 
 # Compatibility Aliases for old scripts
 convam_gpu.so: $(CONV_BINARY)
+	@cp $(CONV_BINARY) $@
 denseam_gpu.so: $(DENSE_BINARY)
+	@cp $(DENSE_BINARY) $@
 matmulam_gpu.so: $(MATMUL_BINARY)
+	@cp $(MATMUL_BINARY) $@
 
 $(CONV_BINARY): $(CONV_OBJS)
 ifeq ($(UNAME_S),Darwin)

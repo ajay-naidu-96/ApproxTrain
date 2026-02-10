@@ -1,9 +1,9 @@
 from tensorflow.keras.layers import LayerNormalization, Layer, Dense, ReLU, Dropout
-from multihead_attention import MultiHeadAttention
-from positional_encoding import PositionEmbeddingFixedWeights
+from ammha.multihead_attention import MultiHeadAttention
+from ammha.positional_encoding import PositionEmbeddingFixedWeights
 from python.keras.layers.amdenselayer import denseam
 import os
-mul=os.environ['mul']
+# No longer using global 'mul' as it is captured at import time.
 # Implementing the Add & Norm Layer
 class AddNormalization(Layer):
     def __init__(self, **kwargs):
@@ -21,7 +21,7 @@ class AddNormalization(Layer):
 class FeedForward(Layer):
     def __init__(self, lut_file, d_ff, d_model, **kwargs):
         super().__init__(**kwargs)
-        if mul=='FP32':
+        if lut_file is None:
             self.fully_connected1 = Dense(d_ff)  # First fully connected layer
             self.fully_connected2 = Dense(d_model)  # Second fully connected layer
         else:
@@ -48,14 +48,14 @@ class EncoderLayer(Layer):
 
     def call(self, x, padding_mask, training):
         # Multi-head attention layer
-        multihead_output = self.multihead_attention(x, x, x, padding_mask)
+        multihead_output = self.multihead_attention(x, keys=x, values=x, mask=padding_mask)
         # Expected output shape = (batch_size, sequence_length, d_model)
 
         # Add in a dropout layer
         multihead_output = self.dropout1(multihead_output, training=training)
 
         # Followed by an Add & Norm layer
-        addnorm_output = self.add_norm1(x, multihead_output)
+        addnorm_output = self.add_norm1(x, sublayer_x=multihead_output)
         # Expected output shape = (batch_size, sequence_length, d_model)
 
         # Followed by a fully connected layer
@@ -66,7 +66,7 @@ class EncoderLayer(Layer):
         feedforward_output = self.dropout2(feedforward_output, training=training)
 
         # Followed by another Add & Norm layer
-        return self.add_norm2(addnorm_output, feedforward_output)
+        return self.add_norm2(addnorm_output, sublayer_x=feedforward_output)
 
 # Implementing the Encoder
 class Encoder(Layer):
@@ -89,6 +89,6 @@ class Encoder(Layer):
 
         # Pass on the positional encoded values to each encoder layer
         for i, layer in enumerate(self.encoder_layer):
-            x = layer(x, padding_mask, training)
+            x = layer(x, padding_mask=padding_mask, training=training)
 
         return x
