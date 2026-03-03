@@ -52,7 +52,7 @@ REGISTER_OP("MatMulAM")
     .Attr("transpose_b: bool = false")
     .Attr("T: {float, int32}")
     .Attr("mant_mul_lut: string")
-    .SetShapeFn(shape_inference::MatMulShape);
+    .SetShapeFn(shape_inference::UnknownShape);
 
 template <> class approx_mul_lut<CPUDevice> : public approx_mul_lut_base {
 public:

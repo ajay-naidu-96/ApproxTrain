@@ -1,6 +1,7 @@
 from tensorflow.python.framework import ops
 from tensorflow.python.eager import context
 from tensorflow.python.ops import gen_math_ops
+from tensorflow.python.ops import math_ops
 from tensorflow.python.framework import dtypes
 from tensorflow.python.util import dispatch
 from tensorflow.python.util.tf_export import tf_export
@@ -76,37 +77,66 @@ def matmulam(a,
             a.dtype != b.dtype):
           # matmul currently doesn't handle mixed-precision inputs.
           use_sparse_matmul = True
-        if use_sparse_matmul:
-            #ret = gen_matmulam.MatMulAM(
-            #  a, b, transpose_a=transpose_a, transpose_b=transpose_b, name=name)
-            return gen_matmulam.MatMulAM(
-              a = (tf.linalg.matrix_transpose(a) if transpose_a else a), b=(tf.linalg.matrix_transpose(b) if transpose_b else b), name=name, mant_mul_lut = mant_mul_lut)
-          # sparse_matmul always returns float32, even with
-          # bfloat16 inputs. This prevents us from configuring bfloat16 training.
-          # casting to bfloat16 also matches non-sparse matmul behavior better.
-          # return ret
-          #if a.dtype == dtypes.bfloat16 and b.dtype == dtypes.bfloat16:
-            #ret = cast(ret, dtypes.bfloat16)
-          #return ret
-        else:
-          return gen_matmulam.MatMulAM(
-              a = (tf.linalg.matrix_transpose(a) if transpose_a else a), b=(tf.linalg.matrix_transpose(b) if transpose_b else b), name=name, mant_mul_lut = mant_mul_lut)
-          #return gen_matmulam.MatMulAM(
-          #    a=a, b=b, transpose_a=transpose_a, transpose_b=transpose_b, name=name)
+        # Custom MatMulAM only supports up to 3D. For 4D (standard in Multi-Head Attention),
+        # we reshape to 3D by combining batch and head dimensions.
+        original_shape_a = a.shape
+        original_shape_b = b.shape
+        is_4d = (a.shape.rank == 4)
+
+        if is_4d:
+            # use tf.shape for dynamic dimensions like batch size
+            dynamic_shape_a = tf.shape(a)
+            dynamic_shape_b = tf.shape(b)
+            
+            batch_size = dynamic_shape_a[0]
+            num_heads = dynamic_shape_a[1]
+            seq_len_a = dynamic_shape_a[2]
+            d_k = dynamic_shape_a[3]
+            seq_len_b = dynamic_shape_b[2]
+            d_v = dynamic_shape_b[3]
+            
+            # Reshape (B, H, S, D) -> (B*H, S, D)
+            a = tf.reshape(a, [batch_size * num_heads, seq_len_a, d_k])
+            b = tf.reshape(b, [batch_size * num_heads, seq_len_b, d_v])
+
+        # Apply transpose if needed
+        a_final = tf.linalg.matrix_transpose(a) if transpose_a else a
+        b_final = tf.linalg.matrix_transpose(b) if transpose_b else b
+        
+        result = gen_matmulam.MatMulAM(
+            a=a_final, 
+            b=b_final, 
+            name=name, 
+            mant_mul_lut=mant_mul_lut
+        )
+
+        if is_4d:
+            # Reshape back (B*H, S, S) -> (B, H, S, S)
+            # The output shape depends on whether it's attention scores (S, S) or value weighted sum (S, D)
+            dynamic_shape_res = tf.shape(result)
+            out_seq_len = dynamic_shape_res[1]
+            out_dim = dynamic_shape_res[2]
+            
+            result = tf.reshape(result, [tf.shape(a_final)[0] if not is_4d else dynamic_shape_a[0], 
+                                         dynamic_shape_a[1], out_seq_len, out_dim])
+            # Simplified reshape back
+            result = tf.reshape(result, [dynamic_shape_a[0], dynamic_shape_a[1], out_seq_len, out_dim])
+            
+        return result
 def _MatMulGradAgainstFirstOnly(op, grad):
   """Gradient for MatMul, only for the first input."""
   t_a = op.get_attr("transpose_a")
   t_b = op.get_attr("transpose_b")
+  lut = op.get_attr("mant_mul_lut")
   b = math_ops.conj(op.inputs[1])
   if not t_a and not t_b:
-    #grad_a = gen_matmulam.MatMulAM(grad, b, transpose_b=True)
-    grad_a = gen_matmulam.MatMulAM(grad, tf.linalg.matrix_transpose(b))
+    grad_a = gen_matmulam.MatMulAM(a=grad, b=tf.linalg.matrix_transpose(b), mant_mul_lut=lut)
   elif not t_a and t_b:
-    grad_a = gen_matmulam.MatMulAM(grad, b)
+    grad_a = gen_matmulam.MatMulAM(a=grad, b=b, mant_mul_lut=lut)
   elif t_a and not t_b:
-    grad_a = gen_matmulam.MatMulAM(b, tf.linalg.matrix_transpose(grad))
+    grad_a = gen_matmulam.MatMulAM(a=b, b=tf.linalg.matrix_transpose(grad), mant_mul_lut=lut)
   elif t_a and t_b:
-    grad_a = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(b), tf.linalg.matrix_transpose(grad))
+    grad_a = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(b), b=tf.linalg.matrix_transpose(grad), mant_mul_lut=lut)
   return grad_a, None
 
 
@@ -114,15 +144,16 @@ def _MatMulGradAgainstSecondOnly(op, grad):
   """Gradient for MatMul, only for the second input."""
   t_a = op.get_attr("transpose_a")
   t_b = op.get_attr("transpose_b")
+  lut = op.get_attr("mant_mul_lut")
   a = math_ops.conj(op.inputs[0])
   if not t_a and not t_b:
-    grad_b = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(a), grad)
+    grad_b = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(a), b=grad, mant_mul_lut=lut)
   elif not t_a and t_b:
-    grad_b = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(grad), a)
+    grad_b = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(grad), b=a, mant_mul_lut=lut)
   elif t_a and not t_b:
-    grad_b = gen_matmulam.MatMulAM(a, grad)
+    grad_b = gen_matmulam.MatMulAM(a=a, b=grad, mant_mul_lut=lut)
   elif t_a and t_b:
-    grad_b = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(grad), tf.linalg.matrix_transpose(a))
+    grad_b = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(grad), b=tf.linalg.matrix_transpose(a), mant_mul_lut=lut)
   return None, grad_b
 @ops.RegisterGradient("MatMulAM")
 def _MatMulGrad(op, grad):
@@ -140,18 +171,19 @@ def _MatMulGrad(op, grad):
 
   t_a = op.get_attr("transpose_a")
   t_b = op.get_attr("transpose_b")
+  lut = op.get_attr("mant_mul_lut")
   a = math_ops.conj(op.inputs[0])
   b = math_ops.conj(op.inputs[1])
   if not t_a and not t_b:
-    grad_a = gen_matmulam.MatMulAM(grad, tf.linalg.matrix_transpose(b))
-    grad_b = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(a), grad)
+    grad_a = gen_matmulam.MatMulAM(a=grad, b=tf.linalg.matrix_transpose(b), mant_mul_lut=lut)
+    grad_b = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(a), b=grad, mant_mul_lut=lut)
   elif not t_a and t_b:
-    grad_a = gen_matmulam.MatMulAM(grad, b)
-    grad_b = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(grad), a)
+    grad_a = gen_matmulam.MatMulAM(a=grad, b=b, mant_mul_lut=lut)
+    grad_b = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(grad), b=a, mant_mul_lut=lut)
   elif t_a and not t_b:
-    grad_a = gen_matmulam.MatMulAM(b, tf.linalg.matrix_transpose(grad))
-    grad_b = gen_matmulam.MatMulAM(a, grad)
+    grad_a = gen_matmulam.MatMulAM(a=b, b=tf.linalg.matrix_transpose(grad), mant_mul_lut=lut)
+    grad_b = gen_matmulam.MatMulAM(a=a, b=grad, mant_mul_lut=lut)
   elif t_a and t_b:
-    grad_a = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(b), tf.linalg.matrix_transpose(grad))
-    grad_b = gen_matmulam.MatMulAM(tf.linalg.matrix_transpose(grad), tf.linalg.matrix_transpose(a))
+    grad_a = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(b), b=tf.linalg.matrix_transpose(grad), mant_mul_lut=lut)
+    grad_b = gen_matmulam.MatMulAM(a=tf.linalg.matrix_transpose(grad), b=tf.linalg.matrix_transpose(a), mant_mul_lut=lut)
   return grad_a, grad_b
