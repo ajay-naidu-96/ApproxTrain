@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers import Adam, AdamW
 from tensorflow.keras.losses import SparseCategoricalCrossentropy
 from tensorflow.keras.metrics import Mean
 
@@ -60,6 +60,15 @@ class Trainer:
         # Save config
         self._save_config()
         
+        # Initialize TensorBoard writers early for remote visibility
+        print(f"TensorBoard log directory: {os.path.abspath(self.log_dir)}")
+        self.train_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train'))
+        self.val_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'val'))
+        with self.train_writer.as_default():
+            tf.summary.text("Status", "Trainer Initializing...", step=0)
+        self.train_writer.flush()
+        print("TensorBoard writers initialized and flushed.")
+        
         # Initialize data
         print("Loading data...")
         self.dataset = ShakespeareDataset(
@@ -99,10 +108,19 @@ class Trainer:
         
         # Initialize optimizer
         learning_rate = CustomSchedule(config.model.d_model, config.training.warmup_steps)
-        self.optimizer = Adam(learning_rate, beta_1=0.9, beta_2=0.98, epsilon=1e-9)
+        self.optimizer = AdamW(
+            learning_rate=learning_rate,
+            weight_decay=config.training.weight_decay,
+            beta_1=0.9,
+            beta_2=0.98,
+            epsilon=1e-9
+        )
         
         # Initialize loss and metrics
-        self.loss_fn = SparseCategoricalCrossentropy(from_logits=True, reduction='none')
+        self.loss_fn = SparseCategoricalCrossentropy(
+            from_logits=True,
+            reduction='none'
+        )
         self.train_loss = Mean(name='train_loss')
         self.val_loss = Mean(name='val_loss')
         
@@ -113,10 +131,6 @@ class Trainer:
             self.checkpoint_dir,
             max_to_keep=5
         )
-        
-        # TensorBoard writer
-        self.train_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'train'))
-        self.val_writer = tf.summary.create_file_writer(os.path.join(self.log_dir, 'val'))
         
         # Metrics tracking
         self.metrics = {
@@ -130,6 +144,8 @@ class Trainer:
         
         self.global_step = 0
         self.best_val_loss = float('inf')
+        self.patience_counter = 0
+        self.patience = 5
     
     def _save_config(self):
         """Save configuration to JSON."""
@@ -256,7 +272,13 @@ class Trainer:
             train_loss = self.train_loss.result().numpy()
             train_perplexity = np.exp(train_loss)
             
-            # Validate
+            # Save train metrics
+            self.metrics['train_loss'].append(float(train_loss))
+            self.metrics['train_perplexity'].append(float(train_perplexity))
+            self.metrics['epoch_times'].append(float(epoch_time))
+            self.metrics['tokens_per_sec'].append(float(tokens_per_sec))
+            
+            # Validate and Early Stopping
             if (epoch + 1) % self.config.training.val_freq == 0:
                 val_loss = self.validate()
                 val_perplexity = np.exp(val_loss)
@@ -266,27 +288,32 @@ class Trainer:
                     tf.summary.scalar('loss', val_loss, step=epoch)
                     tf.summary.scalar('perplexity', val_perplexity, step=epoch)
                 
-                # Save metrics
+                # Save validation metrics
                 self.metrics['val_loss'].append(float(val_loss))
                 self.metrics['val_perplexity'].append(float(val_perplexity))
                 
-                # Save best model
+                # Print epoch summary
+                print(f"  Train Loss: {train_loss:.4f} | Perplexity: {train_perplexity:.2f}")
+                print(f"  Val Loss: {val_loss:.4f} | Perplexity: {val_perplexity:.2f}")
+                print(f"  Time: {epoch_time:.2f}s | Tokens/sec: {tokens_per_sec:.0f}")
+                
+                # Early stopping check
                 if val_loss < self.best_val_loss:
                     self.best_val_loss = val_loss
+                    self.patience_counter = 0
                     self.checkpoint_manager.save()
                     print(f"  ✓ Saved checkpoint (best val_loss: {val_loss:.4f})")
+                else:
+                    self.patience_counter += 1
+                    print(f"  ! No improvement (Patience: {self.patience_counter}/{self.patience})")
+                
+                if self.patience_counter >= self.patience:
+                    print(f"\nEarly stopping triggered after {epoch + 1} epochs.")
+                    break
+            else:
+                # Print minimal summary if no validation
+                print(f"  Train Loss: {train_loss:.4f} | Time: {epoch_time:.2f}s")
             
-            # Save metrics
-            self.metrics['train_loss'].append(float(train_loss))
-            self.metrics['train_perplexity'].append(float(train_perplexity))
-            self.metrics['epoch_times'].append(float(epoch_time))
-            self.metrics['tokens_per_sec'].append(float(tokens_per_sec))
-            
-            # Print epoch summary
-            print(f"  Train Loss: {train_loss:.4f} | Perplexity: {train_perplexity:.2f}")
-            if (epoch + 1) % self.config.training.val_freq == 0:
-                print(f"  Val Loss: {val_loss:.4f} | Perplexity: {val_perplexity:.2f}")
-            print(f"  Time: {epoch_time:.2f}s | Tokens/sec: {tokens_per_sec:.0f}")
             print()
             
             # Save periodic checkpoint

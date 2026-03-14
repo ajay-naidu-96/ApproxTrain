@@ -16,7 +16,7 @@ class ModelConfig:
     num_heads: int = 4  # Number of attention heads
     d_k: int = 64  # Key dimension (d_model / num_heads)
     d_v: int = 64  # Value dimension (d_model / num_heads)
-    dropout_rate: float = 0.1
+    dropout_rate: float = 0.4
     
     def __post_init__(self):
         """Validate configuration."""
@@ -32,6 +32,7 @@ class TrainingConfig:
     batch_size: int = 64
     epochs: int = 50
     learning_rate: float = 3e-4
+    weight_decay: float = 0.01
     warmup_steps: int = 4000
     gradient_clip_norm: float = 1.0
     

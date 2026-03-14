@@ -123,6 +123,8 @@ def matmulam(a,
             result = tf.reshape(result, [dynamic_shape_a[0], dynamic_shape_a[1], out_seq_len, out_dim])
             
         return result
+
+        
 def _MatMulGradAgainstFirstOnly(op, grad):
   """Gradient for MatMul, only for the first input."""
   t_a = op.get_attr("transpose_a")
