@@ -66,16 +66,16 @@ sudo chmod a+r /usr/local/cuda/include/cudnn*.h /usr/local/cuda/lib64/libcudnn*
 Further details and alternative installation methods can be found [installation guide](https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html).
 
 ## Supporting operands
-| Apporximate Operator | Tensorflow equivalent | Gradient Computation | Status   |
+| Approximate Operator | Tensorflow equivalent | Gradient Computation | Status   |
 |----------------------|-----------------------|----------------------|----------|
 | AMConv2D             | Conv2D                | ✔                    | Complete |
 | denseam              | Dense                 | ✔                    | Complete |
 | MatMulAM             | MatMul                | ✔                    | Complete |
 | AMMHA                | MultiHeadAttention    | ✔                    | Complete |
 
-## Running an Example
+## Running Examples
 
-### Install tensorflow dataset
+### Install tensorflow dataset (for MNIST)
 
 In our example, we use *tfds* package to load and preprocess the train/test images. Install *tfds* as:
 
@@ -121,17 +121,32 @@ We provides two approximate multipliers, minimally biased multiplier (MBM) and M
 
 Now generate binary LUT files for AMSimulator
 
-```
+```bash
 cd lut
 ./lut_gen.sh
 ```
-Now, launch the example script with preferred approximate multiplier (e.g. FMBM16_MULTIPLIER) as:
+
+### Example 1: MNIST Classification
+
+Launch the MNIST example script with your preferred approximate multiplier (e.g., FMBM16_MULTIPLIER) as:
     
-```
+```bash
 python3 mnist_example.py --mul="lut/MBM_7.bin"
 ```    
 
 You would expect 98% accuracy or higher, if everything works properly.
+
+### Example 2: Transformer Text Generation (Shakespeare)
+
+We provide a Transformer language model character-level text generation task on the Shakespeare dataset, supporting custom approximate operations (`AMMHA`, `denseam`, `matmulam`).
+
+Launch the training script with your preferred multiplier (e.g., `mbm_7`) as:
+
+```bash
+python3 train_transformer.py --multiplier="mbm_7"
+```
+
+The script supports fp32 baseline as well as various MBM and Mitchell (MIT) multipliers (e.g., `fp32`, `mbm_7`, `mit_5`). It automatically handles the data pipeline, model building, and regularized training loop for the Decoder-only architecture.
  
 If you are not sure about whether you are running GPU or not, run the following commands.
 
