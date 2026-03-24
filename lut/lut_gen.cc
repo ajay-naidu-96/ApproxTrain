@@ -8,6 +8,8 @@
 #include <bitset>
 #include <string>
 #include <cmath>
+#include "posit8e0.inl"
+#include "posit8e1.inl"
 void floatToBinary(float f, std::string& str)
 {
 
@@ -75,6 +77,13 @@ void floatToBinary(float f, std::string& str)
     #define MULTIPLY(a,b) 0;
     #define MANTISSA_BITWIDTH 7
     std::string lut_save = "ZEROS_7.bin";
+#elif POSIT8E1
+    #define POSIT_LUT
+    std::string lut_save = "POS8E1_8.bin";
+#elif POSIT8E0
+    #define POSIT_LUT
+    #define POSIT_ES 0
+    std::string lut_save = "POS8E0_8.bin";
 #endif
 
 #define EMPTYFP32 0x00000000
@@ -84,6 +93,34 @@ void floatToBinary(float f, std::string& str)
 #define MANTISSA_MASK_ ((uint32_t(pow(2,MANTISSA_BITWIDTH))-1) << (23-MANTISSA_BITWIDTH))
 // implementation for approximate mantissa multiplications lookup table generation
 int main(){
+#ifdef POSIT_LUT
+    // POSIT LUT: maps (posit8, posit8) -> float (rounded via posit)
+    std::vector<float> lut;
+    lut.resize(256 * 256);
+    for (uint32_t a = 0; a < 256; ++a) {
+        for (uint32_t b = 0; b < 256; ++b) {
+#if defined(POSIT_ES) && POSIT_ES == 0
+            float va = posit8e0_to_float(static_cast<uint8_t>(a));
+            float vb = posit8e0_to_float(static_cast<uint8_t>(b));
+            float prod = va * vb;
+            uint8_t pc = posit8e0_from_float(prod);
+            float out = posit8e0_to_float(pc);
+#else
+            float va = posit8e1_to_float(static_cast<uint8_t>(a));
+            float vb = posit8e1_to_float(static_cast<uint8_t>(b));
+            float prod = va * vb;
+            uint8_t pc = posit8e1_from_float(prod);
+            float out = posit8e1_to_float(pc);
+#endif
+            lut[(a << 8) | b] = out;
+        }
+    }
+    char *lut_save_name = &lut_save[0];
+    FILE *f = fopen(lut_save_name, "wb");
+    fwrite(lut.data(), sizeof(float), lut.size(), f);
+    fclose(f);
+    return 0;
+#else
     // create a and b
     float a = 0;
     float b = 0;
@@ -124,4 +161,5 @@ int main(){
 
     fclose(f);
     return 0;
+#endif
 }

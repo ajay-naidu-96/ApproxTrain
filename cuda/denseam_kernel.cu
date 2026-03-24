@@ -8,7 +8,7 @@
 using namespace tensorflow;
 using GpuDevice = Eigen::GpuDevice;
 #ifdef AMSIMULATOR
-   #define MULTIPLY(a,b) AMsimulator((a), (b), lut, mant_mask, a_shift, b_shift, mant_bitwidth);
+   #define MULTIPLY(a,b) (use_posit_lut ? PositLutMul((a), (b), posit_lut, posit_es) : AMsimulator((a), (b), lut, mant_mask, a_shift, b_shift, mant_bitwidth))
    #include "AMsimulator.inl"
 #else
    #define MULTIPLY(a,b) ((a)*(b));
@@ -24,9 +24,12 @@ __global__ void DenseamKernel(
     const int input_width, 
     T* output, 
     cudaTextureObject_t lut,
+    cudaTextureObject_t posit_lut,
     const uint32_t mant_mask,
     const uint8_t a_shift,
-    const uint8_t b_shift, const uint8_t mant_bitwidth
+    const uint8_t b_shift, const uint8_t mant_bitwidth,
+    bool use_posit_lut,
+    int posit_es
     ) 
 { 
     unsigned int ix = blockIdx.x * blockDim.x + threadIdx.x; 
@@ -50,9 +53,12 @@ __global__ void DenseamWeightsKernel(
     const int units, 
     T* grad_weights,
     cudaTextureObject_t lut,
+    cudaTextureObject_t posit_lut,
     const uint32_t mant_mask,
     const uint8_t a_shift,
-    const uint8_t b_shift, const uint8_t mant_bitwidth
+    const uint8_t b_shift, const uint8_t mant_bitwidth,
+    bool use_posit_lut,
+    int posit_es
     ) 
 { 
     unsigned int ix = blockIdx.x * blockDim.x + threadIdx.x; 
@@ -76,9 +82,12 @@ __global__ void DenseamInputKernel(
     const int units, 
     T* grad_inputs, 
     cudaTextureObject_t lut,
+    cudaTextureObject_t posit_lut,
     const uint32_t mant_mask,
     const uint8_t a_shift,
-    const uint8_t b_shift, const uint8_t mant_bitwidth
+    const uint8_t b_shift, const uint8_t mant_bitwidth,
+    bool use_posit_lut,
+    int posit_es
     ) 
 { 
     unsigned int ix = blockIdx.x * blockDim.x + threadIdx.x; 
@@ -104,9 +113,11 @@ void DenseamFunctor<GpuDevice, T>::operator()(
         const uint8_t a_shift = mul_lut.get_a_shift_();
         const uint8_t b_shift = mul_lut.get_b_shift_();
         const uint8_t mant_bitwidth = mul_lut.get_mant_width_();
+        const bool use_posit_lut = mul_lut.get_use_posit_lut_();
+        const int posit_es = mul_lut.get_posit_es_();
         unsigned blocksize = 1024;
         unsigned gridsize = (batch*units+blocksize -1)/blocksize;
-        DenseamKernel<T><<<gridsize, blocksize, 0, d.stream()>>>(inputs, weights, batch, units, input_width, output, mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth);
+        DenseamKernel<T><<<gridsize, blocksize, 0, d.stream()>>>(inputs, weights, batch, units, input_width, output, mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);
         gpuErrchk( cudaPeekAtLastError() );
         gpuErrchk( cudaDeviceSynchronize() );
 }
@@ -121,9 +132,11 @@ void DenseamWeightGradFunctor<GpuDevice, T>::operator()
     const uint8_t a_shift = mul_lut.get_a_shift_();
     const uint8_t b_shift = mul_lut.get_b_shift_();
     const uint8_t mant_bitwidth = mul_lut.get_mant_width_();
+    const bool use_posit_lut = mul_lut.get_use_posit_lut_();
+    const int posit_es = mul_lut.get_posit_es_();
     unsigned blocksize = 1024;
     unsigned gridsize = (units*input_width+blocksize -1)/blocksize;
-    DenseamWeightsKernel<T><<<gridsize, blocksize, 0, d.stream()>>>(grads, input, input_width, batch, units, output, mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth);
+    DenseamWeightsKernel<T><<<gridsize, blocksize, 0, d.stream()>>>(grads, input, input_width, batch, units, output, mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
 }
@@ -137,9 +150,11 @@ void DenseamInputGradFunctor<GpuDevice, T>::operator()
     const uint8_t a_shift = mul_lut.get_a_shift_();
     const uint8_t b_shift = mul_lut.get_b_shift_();
     const uint8_t mant_bitwidth = mul_lut.get_mant_width_();
+    const bool use_posit_lut = mul_lut.get_use_posit_lut_();
+    const int posit_es = mul_lut.get_posit_es_();
     unsigned blocksize = 1024;
     unsigned gridsize = (batch*input_width+blocksize -1)/blocksize;
-    DenseamInputKernel<T><<<gridsize, blocksize, 0, d.stream()>>>(grads, weight, input_width, batch, units, output, mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth);
+    DenseamInputKernel<T><<<gridsize, blocksize, 0, d.stream()>>>(grads, weight, input_width, batch, units, output, mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
 }

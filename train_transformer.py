@@ -342,7 +342,8 @@ def main():
     # Multiplier configuration
     parser.add_argument('--multiplier', type=str, default='fp32',
                        choices=['fp32', 'mbm_7', 'mbm_5', 'mbm_3', 'mbm_1',
-                               'mit_7', 'mit_5', 'mit_3', 'mit_1'],
+                               'mit_7', 'mit_5', 'mit_3', 'mit_1',
+                               'pos8e0', 'pos8e1'],
                        help='Multiplier type to use')
     
     # Training configuration
@@ -366,6 +367,12 @@ def main():
     # Create configuration
     if args.multiplier == 'fp32':
         config = Config.create_fp32_config()
+    elif args.multiplier == 'pos8e0':
+        lut_file = "lut/POS8E0_8.bin"
+        config = Config.create_approximate_config(lut_file, "POS8E0")
+    elif args.multiplier == 'pos8e1':
+        lut_file = "lut/POS8E1_8.bin"
+        config = Config.create_approximate_config(lut_file, "POS8E1")
     else:
         # Parse multiplier name
         mul_type, bits = args.multiplier.split('_')

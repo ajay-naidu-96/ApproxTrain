@@ -125,6 +125,8 @@ void ConvamKernelLauncher(
     const uint8_t a_shift = mul_lut.get_a_shift_();
     const uint8_t b_shift = mul_lut.get_b_shift_();
     const uint8_t mant_bitwidth = mul_lut.get_mant_width_();
+    const bool use_posit_lut = mul_lut.get_use_posit_lut_();
+    const int posit_es = mul_lut.get_posit_es_();
     if (filter_row == 1 && filter_col == 1 && stride_row == 1 &&
         stride_col == 1) {
         // The kernel is 1x1.
@@ -137,7 +139,7 @@ void ConvamKernelLauncher(
         //const int size = m*n;
         dim3 blockSize(16, 16, 1);
         dim3 gridSize((n + blockSize.x - 1) / blockSize.x, (m + blockSize.y - 1) / blockSize.y, 1);
-        gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,inputs,lda,filter,ldb,output, ldc, mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth);
+        gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,inputs,lda,filter,ldb,output, ldc, mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);
         gpuErrchk( cudaPeekAtLastError() );
         gpuErrchk( cudaDeviceSynchronize() );
         return;
@@ -153,7 +155,7 @@ void ConvamKernelLauncher(
          //const int size = m*n;
          dim3 blockSize(16, 16, 1);
          dim3 gridSize((n + blockSize.x - 1) / blockSize.x, (m + blockSize.y - 1) / blockSize.y, 1);
-         gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,inputs,lda,filter,ldb,output,ldc, mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth);
+         gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,inputs,lda,filter,ldb,output,ldc, mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);
          gpuErrchk( cudaPeekAtLastError() );
          gpuErrchk( cudaDeviceSynchronize() );
          return;
@@ -167,7 +169,7 @@ void ConvamKernelLauncher(
     const size_t ldc = out_depth;
     dim3 blockSize(16, 16, 1);
     dim3 gridSize((n + blockSize.x - 1) / blockSize.x, (m + blockSize.y - 1) / blockSize.y, 1);
-    gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,im2col,lda,filter,ldb,output,ldc, mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth); 
+    gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,im2col,lda,filter,ldb,output,ldc, mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es); 
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
 
@@ -411,6 +413,8 @@ void ConvamFilterGradKernelLauncher(
     const uint8_t a_shift = mul_lut.get_a_shift_();
     const uint8_t b_shift = mul_lut.get_b_shift_();
     const uint8_t mant_bitwidth = mul_lut.get_mant_width_();
+    const bool use_posit_lut = mul_lut.get_use_posit_lut_();
+    const int posit_es = mul_lut.get_posit_es_();
 
     im2colLauncher_filtergrad<T>(d,input,batch,input_height,input_width,grad_height,grad_width,grad_channel,in_depth,filter_height,filter_width,stride_row,stride_col,\
     filter_left_offset,filter_top_offset,1,1,im2col);
@@ -422,7 +426,9 @@ void ConvamFilterGradKernelLauncher(
     const size_t ldc = n;
     dim3 blockSize(16, 16, 1);
     dim3 gridSize((n + blockSize.x - 1) / blockSize.x, (m + blockSize.y - 1) / blockSize.y, 1);
-    gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,im2col,lda,grad,ldb,out,ldc,mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth); 
+    gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,im2col,lda,grad,ldb,out,ldc,
+        mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(),
+        mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
 };
@@ -563,6 +569,8 @@ void ConvamInputGradKernelLauncher(
     const uint8_t a_shift = mul_lut.get_a_shift_();
     const uint8_t b_shift = mul_lut.get_b_shift_();
     const uint8_t mant_bitwidth = mul_lut.get_mant_width_();
+    const bool use_posit_lut = mul_lut.get_use_posit_lut_();
+    const int posit_es = mul_lut.get_posit_es_();
     im2colLauncher_inputgrad<T>(
         d,grad, input_batch, hole_grad_height, hole_grad_width, input_height, input_width,input_channel,output_channel,filter_height,
         filter_width,stride_rows,stride_cols,back_pad_left,back_pad_top,1,1,im2col);
@@ -580,7 +588,9 @@ void ConvamInputGradKernelLauncher(
     gpuErrchk( cudaDeviceSynchronize() );
     dim3 blockSize(16, 16, 1);
     dim3 gridSize((n + blockSize.x - 1) / blockSize.x, (m + blockSize.y - 1) / blockSize.y, 1);
-    gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,im2col,lda,rsfilter,ldb,output,ldc,mul_lut.get_mant_mul_lut_text_(), mant_mask, a_shift, b_shift, mant_bitwidth);
+    gemm<T><<<gridSize,blockSize,0,d.stream()>>>(m,n,k,im2col,lda,rsfilter,ldb,output,ldc,
+        mul_lut.get_mant_mul_lut_text_(), mul_lut.get_posit_mul_lut_text_(),
+        mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);
     gpuErrchk( cudaPeekAtLastError() );
     gpuErrchk( cudaDeviceSynchronize() );
 
@@ -661,16 +671,6 @@ template struct ConvamFilterGradFunctor<GPUDevice, float>;
 template struct ConvamFilterGradFunctor<GPUDevice, int32>;
 template struct ConvamFunctor<GPUDevice, float>;
 template struct ConvamFunctor<GPUDevice, int32>;
-
-template __global__ void gemm<float>(size_t m, size_t n, size_t k,
-    const float *a, size_t lda, const float *b, size_t ldb,
-   float *c, size_t ldc, cudaTextureObject_t mant_lut,
-   uint32_t mant_mask, uint8_t a_shift, uint8_t b_shift, uint8_t mant_bitwidth);
-
-template __global__ void gemm<int32>(size_t m, size_t n, size_t k,
-    const int32 *a, size_t lda, const int32 *b, size_t ldb,
-   int32 *c, size_t ldc, cudaTextureObject_t mant_lut,
-   uint32_t mant_mask, uint8_t a_shift, uint8_t b_shift, uint8_t mant_bitwidth);
 
 template __global__ void reverseNswapdim23<float>(size_t height, size_t width, size_t n_channels, size_t n_filters, float* dest, const float* src );
 template __global__ void reverseNswapdim23<int32>(size_t height, size_t width, size_t n_channels, size_t n_filters, int32* dest, const int32* src );

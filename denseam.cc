@@ -21,6 +21,7 @@
 #include <iostream>
 #include <math.h>
 #include <sys/time.h>
+#include <type_traits>
 using namespace std;
 using namespace tensorflow;
 using GPUDevice = Eigen::GpuDevice;
@@ -54,12 +55,24 @@ template <typename T> struct DenseamFunctor<CPUDevice, T> {
   void operator()(const CPUDevice &d, const T *input, const T *weights,
                   T *output, const int batch, const int units,
                   const int input_width, approx_mul_lut<CPUDevice> &mul_lut) {
+    const bool use_posit =
+        mul_lut.get_use_posit_lut_() && std::is_same<T, float>::value;
+    const float *posit_lut =
+        use_posit ? mul_lut.get_posit_mul_lut_host_() : nullptr;
+    const int posit_es = mul_lut.get_posit_es_();
     for (int i = 0; i < batch; i++) {
       for (int j = 0; j < units; j++) {
         output[i * units + j] = T(0);
         for (int k = 0; k < input_width; k++) {
-          output[i * units + j] +=
-              input[i * input_width + k] * weights[k * units + j];
+          if (use_posit) {
+            output[i * units + j] += static_cast<T>(posit_lut_mul_host_es(
+                static_cast<float>(input[i * input_width + k]),
+                static_cast<float>(weights[k * units + j]), posit_lut,
+                posit_es));
+          } else {
+            output[i * units + j] +=
+                input[i * input_width + k] * weights[k * units + j];
+          }
         }
       }
     }
@@ -130,11 +143,23 @@ template <typename T> struct DenseamWeightGradFunctor<CPUDevice, T> {
   void operator()(const CPUDevice &d, const T *input, const T *grads, T *output,
                   const int batch, const int units, const int input_width,
                   approx_mul_lut<CPUDevice> &mul_lut) {
+    const bool use_posit =
+        mul_lut.get_use_posit_lut_() && std::is_same<T, float>::value;
+    const float *posit_lut =
+        use_posit ? mul_lut.get_posit_mul_lut_host_() : nullptr;
+    const int posit_es = mul_lut.get_posit_es_();
     for (int i = 0; i < batch; i++) {
       for (int j = 0; j < units; j++) {
         for (int k = 0; k < input_width; k++) {
-          output[k * units + j] +=
-              input[i * input_width + k] * grads[i * units + j];
+          if (use_posit) {
+            output[k * units + j] += static_cast<T>(posit_lut_mul_host_es(
+                static_cast<float>(input[i * input_width + k]),
+                static_cast<float>(grads[i * units + j]), posit_lut,
+                posit_es));
+          } else {
+            output[k * units + j] +=
+                input[i * input_width + k] * grads[i * units + j];
+          }
         }
       }
     }
@@ -144,11 +169,23 @@ template <typename T> struct DenseamInputGradFunctor<CPUDevice, T> {
   void operator()(const CPUDevice &d, const T *weight, const T *grads,
                   T *output, const int batch, const int units,
                   const int input_width, approx_mul_lut<CPUDevice> &mul_lut) {
+    const bool use_posit =
+        mul_lut.get_use_posit_lut_() && std::is_same<T, float>::value;
+    const float *posit_lut =
+        use_posit ? mul_lut.get_posit_mul_lut_host_() : nullptr;
+    const int posit_es = mul_lut.get_posit_es_();
     for (int i = 0; i < batch; i++) {
       for (int j = 0; j < units; j++) {
         for (int k = 0; k < input_width; k++) {
-          output[i * input_width + k] +=
-              weight[k * units + j] * grads[i * units + j];
+          if (use_posit) {
+            output[i * input_width + k] += static_cast<T>(posit_lut_mul_host_es(
+                static_cast<float>(weight[k * units + j]),
+                static_cast<float>(grads[i * units + j]), posit_lut,
+                posit_es));
+          } else {
+            output[i * input_width + k] +=
+                weight[k * units + j] * grads[i * units + j];
+          }
         }
       }
     }

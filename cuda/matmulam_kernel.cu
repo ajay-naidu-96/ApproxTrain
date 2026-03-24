@@ -19,6 +19,8 @@ void LaunchMatMul<Eigen::GpuDevice, T>::operator()(
     const uint8_t a_shift = mul_lut.get_a_shift_();
     const uint8_t b_shift = mul_lut.get_b_shift_();
     const uint8_t mant_bitwidth = mul_lut.get_mant_width_();
+    const bool use_posit_lut = mul_lut.get_use_posit_lut_();
+    const int posit_es = mul_lut.get_posit_es_();
     const int m = row_a;
     const int n = col_b;
     const int k = col_a;
@@ -34,8 +36,9 @@ void LaunchMatMul<Eigen::GpuDevice, T>::operator()(
                 T* temp_c = out + i*row_a*col_b;
                 gemm<T><<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                         temp_a, lda, b, ldb, temp_c, ldc, 
-                        mul_lut.get_mant_mul_lut_text_(), 
-                        mant_mask, a_shift, b_shift, mant_bitwidth);    
+                        mul_lut.get_mant_mul_lut_text_(),
+                        mul_lut.get_posit_mul_lut_text_(),
+                        mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);    
                 gpuErrchk( cudaPeekAtLastError() );
                 gpuErrchk( cudaDeviceSynchronize() );
             } 
@@ -46,8 +49,9 @@ void LaunchMatMul<Eigen::GpuDevice, T>::operator()(
                 T* temp_c = out + i*row_a*col_b;
                 gemm<T><<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                         temp_a, lda, temp_b, ldb, temp_c, ldc, 
-                        mul_lut.get_mant_mul_lut_text_(), 
-                        mant_mask, a_shift, b_shift, mant_bitwidth);    
+                        mul_lut.get_mant_mul_lut_text_(),
+                        mul_lut.get_posit_mul_lut_text_(),
+                        mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);    
                 gpuErrchk( cudaPeekAtLastError() );
                 gpuErrchk( cudaDeviceSynchronize() );
             } 
@@ -57,8 +61,9 @@ void LaunchMatMul<Eigen::GpuDevice, T>::operator()(
                 T* temp_c = out + i*row_a*col_b;
                 gemm<T><<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                         a, lda, temp_b, ldb, temp_c, ldc, 
-                        mul_lut.get_mant_mul_lut_text_(), 
-                        mant_mask, a_shift, b_shift, mant_bitwidth);    
+                        mul_lut.get_mant_mul_lut_text_(),
+                        mul_lut.get_posit_mul_lut_text_(),
+                        mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);    
                 gpuErrchk( cudaPeekAtLastError() );
                 gpuErrchk( cudaDeviceSynchronize() );
             } 
@@ -70,8 +75,9 @@ void LaunchMatMul<Eigen::GpuDevice, T>::operator()(
             T* temp_c = out + i*row_a*col_b;
             gemm<T><<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                     temp_a, lda, b, ldb, temp_c, ldc, 
-                    mul_lut.get_mant_mul_lut_text_(), 
-                    mant_mask, a_shift, b_shift, mant_bitwidth);    
+                    mul_lut.get_mant_mul_lut_text_(),
+                    mul_lut.get_posit_mul_lut_text_(),
+                    mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);    
             gpuErrchk( cudaPeekAtLastError() );
             gpuErrchk( cudaDeviceSynchronize() );
         } 
@@ -81,8 +87,9 @@ void LaunchMatMul<Eigen::GpuDevice, T>::operator()(
             T* temp_c = out + i*row_a*col_b;
             gemm<T><<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                     a, lda, temp_b, ldb, temp_c, ldc, 
-                    mul_lut.get_mant_mul_lut_text_(), 
-                    mant_mask, a_shift, b_shift, mant_bitwidth);    
+                    mul_lut.get_mant_mul_lut_text_(),
+                    mul_lut.get_posit_mul_lut_text_(),
+                    mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);    
             gpuErrchk( cudaPeekAtLastError() );
             gpuErrchk( cudaDeviceSynchronize() );
         } 
@@ -90,8 +97,9 @@ void LaunchMatMul<Eigen::GpuDevice, T>::operator()(
     } else {
         gemm<T><<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                     a, lda, b, ldb, out, ldc, 
-                    mul_lut.get_mant_mul_lut_text_(), 
-                    mant_mask, a_shift, b_shift, mant_bitwidth);    
+                    mul_lut.get_mant_mul_lut_text_(),
+                    mul_lut.get_posit_mul_lut_text_(),
+                    mant_mask, a_shift, b_shift, mant_bitwidth, use_posit_lut, posit_es);    
     
     }
     gpuErrchk( cudaPeekAtLastError() );

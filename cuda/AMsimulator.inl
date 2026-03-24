@@ -10,6 +10,17 @@
 #define CARRY_MASK 0x80
 #define CLEAR_CARRY_MASK 0x7f
 
+#include "lut/posit8e0.inl"
+#include "lut/posit8e1.inl"
+
+__device__ __inline__ float PositLutMul(float Af, float Bf, cudaTextureObject_t lut, int posit_es)
+{
+    uint8_t pa = posit_es == 0 ? posit8e0_from_float(Af) : posit8e1_from_float(Af);
+    uint8_t pb = posit_es == 0 ? posit8e0_from_float(Bf) : posit8e1_from_float(Bf);
+    uint32_t idx = (uint32_t(pa) << 8) | uint32_t(pb);
+    return tex1Dfetch<float>(lut, idx);
+}
+
 __device__ __inline__ float AMsimulator(float Af, float Bf, cudaTextureObject_t lut, uint32_t mant_mask, uint8_t a_shift, uint8_t b_shift, uint8_t mant_bitwidth)
 {
     uint32_t  at = *(uint32_t *)&Af;

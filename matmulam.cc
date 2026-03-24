@@ -38,6 +38,7 @@ limitations under the License.
 
 #include "approx_mul_lut.h"
 #include "matmulam.h"
+#include <type_traits>
 
 using namespace tensorflow;
 
@@ -182,13 +183,20 @@ private:
 };
 template <typename T>
 void gemm_cpu(const CPUDevice &d, int m, int n, int k, const T *a, int lda,
-              const T *b, int ldb, T *c, int ldc) {
+              const T *b, int ldb, T *c, int ldc,
+              approx_mul_lut<CPUDevice> &mul_lut) {
   const size_t aIStride = size_t(lda);
   const size_t aLStride = 1;
   const size_t bJStride = 1;
   const size_t bLStride = size_t(ldb);
   const size_t cIStride = size_t(ldc);
   const size_t cJStride = 1;
+
+  const bool use_posit =
+      mul_lut.get_use_posit_lut_() && std::is_same<T, float>::value;
+  const float *posit_lut =
+      use_posit ? mul_lut.get_posit_mul_lut_host_() : nullptr;
+  const int posit_es = mul_lut.get_posit_es_();
 
   for (size_t j = 0; j < size_t(n); ++j) {
     for (size_t i = 0; i < size_t(m); ++i) {
@@ -198,7 +206,13 @@ void gemm_cpu(const CPUDevice &d, int m, int n, int k, const T *a, int lda,
         const T aValue = a[aIndex];
         const size_t bIndex = ((j * bJStride) + (l * bLStride));
         const T bValue = b[bIndex];
-        total += (aValue * bValue);
+        if (use_posit) {
+          total += static_cast<T>(posit_lut_mul_host_es(
+              static_cast<float>(aValue), static_cast<float>(bValue),
+              posit_lut, posit_es));
+        } else {
+          total += (aValue * bValue);
+        }
       }
       const size_t cIndex = ((i * cIStride) + (j * cJStride));
       c[cIndex] = total;
@@ -222,7 +236,7 @@ template <typename T> struct LaunchMatMul<CPUDevice, T> {
           // strided gemm?
           const T &temp_a = a + i * row_a * col_a;
           T &temp_c = out + i * row_a * col_b;
-          gemm_cpu<T>(d, m, n, k, temp_a, lda, b, ldb, temp_c, ldc);
+          gemm_cpu<T>(d, m, n, k, temp_a, lda, b, ldb, temp_c, ldc, mul_lut);
         }
       } else if (batch_a != 1 && batch_b != 1) {
         for (int i = 0; i < batch_b; i++) {
@@ -230,7 +244,8 @@ template <typename T> struct LaunchMatMul<CPUDevice, T> {
           const T &temp_a = a + i * row_a * col_a;
           const T &temp_b = b + i * row_b * col_b;
           T &temp_c = out + i * row_a * col_b;
-          gemm_cpu<T>(d, m, n, k, temp_a, lda, temp_b, ldb, temp_c, ldc);
+          gemm_cpu<T>(d, m, n, k, temp_a, lda, temp_b, ldb, temp_c, ldc,
+                      mul_lut);
         }
 
       } else {
@@ -238,7 +253,7 @@ template <typename T> struct LaunchMatMul<CPUDevice, T> {
           // strided gemm?
           const T &temp_b = b + i * row_b * col_b;
           T &temp_c = out + i * row_a * col_b;
-          gemm_cpu<T>(d, m, n, k, a, lda, temp_b, ldb, temp_c, ldc);
+          gemm_cpu<T>(d, m, n, k, a, lda, temp_b, ldb, temp_c, ldc, mul_lut);
         }
       }
     } else if (batch_a != 0) {
@@ -246,17 +261,17 @@ template <typename T> struct LaunchMatMul<CPUDevice, T> {
         // strided gemm?
         const T &temp_a = a + i * row_a * col_a;
         T &temp_c = out + i * row_a * col_b;
-        gemm_cpu<T>(d, m, n, k, temp_a, lda, b, ldb, temp_c, ldc);
+        gemm_cpu<T>(d, m, n, k, temp_a, lda, b, ldb, temp_c, ldc, mul_lut);
       }
     } else if (batch_b != 0) {
       for (int i = 0; i < batch_b; i++) {
         // strided gemm?
         const T &temp_b = a + i * row_b * col_b;
         T &temp_c = out + i * row_a * col_b;
-        gemm_cpu<T>(d, m, n, k, a, lda, temp_b, ldb, temp_c, ldc);
+        gemm_cpu<T>(d, m, n, k, a, lda, temp_b, ldb, temp_c, ldc, mul_lut);
       }
     } else {
-      gemm_cpu<T>(d, m, n, k, a, lda, b, ldb, out, ldc);
+      gemm_cpu<T>(d, m, n, k, a, lda, b, ldb, out, ldc, mul_lut);
     }
   }
 };

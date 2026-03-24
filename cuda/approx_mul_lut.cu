@@ -23,31 +23,58 @@ class approx_mul_lut<Eigen::GpuDevice> : public approx_mul_lut_base {
 };
 approx_mul_lut<Eigen::GpuDevice>::approx_mul_lut(OpKernelConstruction * context):
             approx_mul_lut_base(context){
-    gpuErrchk(cudaMalloc(&mant_mul_lut_cuda_, 
-            mant_mul_lut_.size() * sizeof(uint8_t)));
-    gpuErrchk(cudaMemcpy(mant_mul_lut_cuda_, mant_mul_lut_.data(),
-            mant_mul_lut_.size()*sizeof(uint8_t), 
-            cudaMemcpyHostToDevice));
-    cudaResourceDesc mant_mul_lut_res_desc;
-    memset(&mant_mul_lut_res_desc, 0, sizeof(cudaResourceDesc));
-    mant_mul_lut_res_desc.resType = cudaResourceTypeLinear;
-    mant_mul_lut_res_desc.res.linear.devPtr = mant_mul_lut_cuda_;
-    mant_mul_lut_res_desc.res.linear.desc.f = 
-        cudaChannelFormatKindUnsigned;
-    mant_mul_lut_res_desc.res.linear.desc.x = 8;
-    mant_mul_lut_res_desc.res.linear.sizeInBytes = 
-        mant_mul_lut_.size() * sizeof(uint8_t);
-    
-    cudaTextureDesc mant_mul_text_desc;
-    memset(&mant_mul_text_desc, 0, sizeof(cudaTextureDesc));
-    mant_mul_text_desc.readMode = cudaReadModeElementType;
-        
-    gpuErrchk(cudaCreateTextureObject(&mant_mul_lut_text_, &mant_mul_lut_res_desc, 
-            &mant_mul_text_desc, nullptr));                
+    if (use_posit_lut_) {
+        gpuErrchk(cudaMalloc(&posit_mul_lut_cuda_,
+                posit_mul_lut_.size() * sizeof(float)));
+        gpuErrchk(cudaMemcpy(posit_mul_lut_cuda_, posit_mul_lut_.data(),
+                posit_mul_lut_.size() * sizeof(float),
+                cudaMemcpyHostToDevice));
+        cudaResourceDesc posit_lut_res_desc;
+        memset(&posit_lut_res_desc, 0, sizeof(cudaResourceDesc));
+        posit_lut_res_desc.resType = cudaResourceTypeLinear;
+        posit_lut_res_desc.res.linear.devPtr = posit_mul_lut_cuda_;
+        posit_lut_res_desc.res.linear.desc = cudaCreateChannelDesc<float>();
+        posit_lut_res_desc.res.linear.sizeInBytes =
+            posit_mul_lut_.size() * sizeof(float);
+
+        cudaTextureDesc posit_text_desc;
+        memset(&posit_text_desc, 0, sizeof(cudaTextureDesc));
+        posit_text_desc.readMode = cudaReadModeElementType;
+
+        gpuErrchk(cudaCreateTextureObject(&posit_mul_lut_text_, &posit_lut_res_desc,
+                &posit_text_desc, nullptr));
+    } else {
+        gpuErrchk(cudaMalloc(&mant_mul_lut_cuda_,
+                mant_mul_lut_.size() * sizeof(uint8_t)));
+        gpuErrchk(cudaMemcpy(mant_mul_lut_cuda_, mant_mul_lut_.data(),
+                mant_mul_lut_.size()*sizeof(uint8_t),
+                cudaMemcpyHostToDevice));
+        cudaResourceDesc mant_mul_lut_res_desc;
+        memset(&mant_mul_lut_res_desc, 0, sizeof(cudaResourceDesc));
+        mant_mul_lut_res_desc.resType = cudaResourceTypeLinear;
+        mant_mul_lut_res_desc.res.linear.devPtr = mant_mul_lut_cuda_;
+        mant_mul_lut_res_desc.res.linear.desc.f =
+            cudaChannelFormatKindUnsigned;
+        mant_mul_lut_res_desc.res.linear.desc.x = 8;
+        mant_mul_lut_res_desc.res.linear.sizeInBytes =
+            mant_mul_lut_.size() * sizeof(uint8_t);
+
+        cudaTextureDesc mant_mul_text_desc;
+        memset(&mant_mul_text_desc, 0, sizeof(cudaTextureDesc));
+        mant_mul_text_desc.readMode = cudaReadModeElementType;
+
+        gpuErrchk(cudaCreateTextureObject(&mant_mul_lut_text_, &mant_mul_lut_res_desc,
+                &mant_mul_text_desc, nullptr));
+    }
 
 };
 
 approx_mul_lut<Eigen::GpuDevice>::~approx_mul_lut(){
-    cudaDestroyTextureObject(mant_mul_lut_text_);
-    cudaFree(mant_mul_lut_cuda_);
+    if (use_posit_lut_) {
+        cudaDestroyTextureObject(posit_mul_lut_text_);
+        cudaFree(posit_mul_lut_cuda_);
+    } else {
+        cudaDestroyTextureObject(mant_mul_lut_text_);
+        cudaFree(mant_mul_lut_cuda_);
+    }
 };

@@ -21,6 +21,7 @@
 #include <iostream>
 #include <math.h>
 #include <sys/time.h>
+#include <type_traits>
 
 using namespace std;
 using namespace tensorflow;
@@ -452,6 +453,11 @@ template <typename T> struct ConvamFunctor<CPUDevice, T> {
                   const T *im2col, const int padding,
                   approx_mul_lut<CPUDevice> &mul_lut) {
 
+    const bool use_posit =
+        mul_lut.get_use_posit_lut_() && std::is_same<T, float>::value;
+    const float *posit_lut =
+        use_posit ? mul_lut.get_posit_mul_lut_host_() : nullptr;
+    const int posit_es = mul_lut.get_posit_es_();
     for (int batch_ = 0; batch_ < batch; ++batch_) {
       for (int out_y = 0; out_y < out_rows; ++out_y) {
         for (int out_x = 0; out_x < out_cols; ++out_x) {
@@ -478,7 +484,14 @@ template <typename T> struct ConvamFunctor<CPUDevice, T> {
                       filter[(filter_y * filter_cols * in_depth * out_depth) +
                              (filter_x * in_depth * out_depth) +
                              (in_channel * out_depth) + out_channel];
-                  total += (input_value * filter_value);
+                  if (use_posit) {
+                    total += static_cast<T>(posit_lut_mul_host_es(
+                        static_cast<float>(input_value),
+                        static_cast<float>(filter_value), posit_lut,
+                        posit_es));
+                  } else {
+                    total += (input_value * filter_value);
+                  }
                 }
               }
             }
@@ -651,6 +664,11 @@ template <typename T> struct ConvamFilterGradFunctor<CPUDevice, T> {
                   const int filter_rows, T *output,
                   approx_mul_lut<CPUDevice> &mul_lut) {
 
+    const bool use_posit =
+        mul_lut.get_use_posit_lut_() && std::is_same<T, float>::value;
+    const float *posit_lut =
+        use_posit ? mul_lut.get_posit_mul_lut_host_() : nullptr;
+    const int posit_es = mul_lut.get_posit_es_();
     for (int out_y = 0; out_y < filter_rows; ++out_y) {
       for (int out_x = 0; out_x < filter_cols; ++out_x) {
         for (int in_channel = 0; in_channel < in_depth; ++in_channel) {
@@ -687,7 +705,14 @@ template <typename T> struct ConvamFilterGradFunctor<CPUDevice, T> {
                                  (int(i_y) * out_cols * out_depth) +
                                  (int(i_x) * out_depth) + out_channel]
                           : 0;
-                  total += (input_value * grad_value);
+                  if (use_posit) {
+                    total += static_cast<T>(posit_lut_mul_host_es(
+                        static_cast<float>(input_value),
+                        static_cast<float>(grad_value), posit_lut,
+                        posit_es));
+                  } else {
+                    total += (input_value * grad_value);
+                  }
                 }
               }
             }
@@ -915,6 +940,11 @@ template <typename T> struct ConvamInputGradFunctor<CPUDevice, T> {
                   const int input_cols, const int in_depth, T *output,
                   const int out_rows, const int out_cols,
                   approx_mul_lut<CPUDevice> &mul_lut) {
+    const bool use_posit =
+        mul_lut.get_use_posit_lut_() && std::is_same<T, float>::value;
+    const float *posit_lut =
+        use_posit ? mul_lut.get_posit_mul_lut_host_() : nullptr;
+    const int posit_es = mul_lut.get_posit_es_();
     for (int ibatch = 0; ibatch < batch; ++ibatch) {
       for (int out_y = 0; out_y < input_rows; ++out_y) {
         for (int out_x = 0; out_x < input_cols; ++out_x) {
@@ -953,7 +983,14 @@ template <typename T> struct ConvamInputGradFunctor<CPUDevice, T> {
                               out_depth) +
                              (in_channel * out_depth) + out_channel];
 
-                  total += (input_value * filter_v);
+                  if (use_posit) {
+                    total += static_cast<T>(posit_lut_mul_host_es(
+                        static_cast<float>(input_value),
+                        static_cast<float>(filter_v), posit_lut,
+                        posit_es));
+                  } else {
+                    total += (input_value * filter_v);
+                  }
                 }
               }
             }
