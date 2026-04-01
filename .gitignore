@@ -75,7 +75,9 @@ errorout
 sparsity_acc_all
 *.png
 /logs
-/checkpoint
+/train_logs/
+/checkpoints/
+a.out
 lut/*.bin
 *.bin
 *.pdf

@@ -1,184 +1,122 @@
-# ApproxTrain
+# ApproxTrain: Extension Fast Simulation of Approximate Multipliers for Transformer Training and Inference.
 
-ApproxTrain is an open-source framework that allows sufficiently fast evaluation of DNNs training and inference using simulated approximate multipliers. ApproxTrain is as user-friendly as TensorFlow  (TF) and requires only a high-level description of a DNN architecture along with C/C++ functional models of the approximate multiplier. We improve the speed of the simulation at the multiplier level using a novel LUT-based approximate floating-point (FP) multiplier on GPU (AM Simulator). Additionally, a novel flow is presented to seamlessly convert C/C++ functional models of approximate FP multipliers into AM Simulator. ApproxTrain leverages CUDA and efficiently integrates AM Siumlator into TensorFlow library, to overcome the absence of native hardware approximate multiplier in commercial GPUs.
+Mulipliers simulated: 
+1. Native FP32
+2. 8-bit Posit (pos8e1)
+3. 8-bit Posit (pos8e0)
+4. Mitchell Logarithm-based multiplier (mit_7)
+5. Minimally Biased Multiplier (mbm_7)
+6. 3 bit variants of 4 and 5. 
 
-## Installation of Dependencies   
+**Author:** Ajay Gopi
 
-ApproxTrain requires Tensorflow, CUDA Toolkit, cuDNN, GNU C++ compiler and Python3. We recommend using Python 3.5-3.8 and g++ 5.4.0 or higher.
-We did the development and testing on an Ubuntu 18.04.6 environment with Tensorflow 2.3.0, CUDA 10.1, CuDNN 7.6.5, g++ 8.4 and python 3.6.9. A brief guide on installing those dependency versions on an Ubuntu system are given below. Alternatively, If you can follow the official  TensorFlow [build guide](https://www.tensorflow.org/install/source).
+## Overview
+This repository is a fork of the original [ApproxTrain framework](https://github.com/AaronJing/ApproxTrain). ApproxTrain is an open-source framework for evaluating DNN training and inference using simulated approximate floating-point (FP) multipliers.
 
+**Author's Contributions:**
+- Upgraded the deep learning backend to utilize the latest stable TensorFlow variants.
+- Expanded evaluation capabilities to support deep modern architectures, specifically **Decoder-only Transformers** on language modeling tasks.
+- Implemented and evaluated **8-bit Posit Arithmetic** simulated multipliers alongside the existing MBM and Mitchell baselines.
 
-### Tensorflow 2.3
-    
+## Directory Hierarchy
+```text
+ApproxTrain/
+├── ammha/                            # Custom Multi-Head Attention TF ops
+├── checkpoints/                      # Saved Transformer weights for each run
+├── cuda/                             # Core C++/CUDA kernels for approximate math
+├── data/                             # Raw text and structured datasets (Shakespeare)
+├── docs/                             # Project reports and reference papers
+├── figures/                          # Generated dataset plots and diagrams
+├── logs/ & train_logs/               # TensorBoard logging output and screenshots
+├── lut/                              # C++ headers and bash macros to generate LUTs
+│   ├── lut_gen.sh
+│   └── posit8e1.inl                  # 8-bit Posit mathematical implementations
+├── python/                           # Core utilities and data pipelines
+├── Makefile                          # Build commands for the Custom TF ops
+├── approx_mul_lut.h                  # Core header connecting LUTs to TensorFlow
+├── benchmark.py & evaluate_model.py  # Inference testing scripts
+├── compare_baselines.py              # Evaluation script to compare runs
+├── config.py                         # Hyperparameters and model configurations
+├── convam.cc, denseam.cc, matmulam.cc# Custom TensorFlow Operator C++ Bindings
+├── run_posit_train_jobs.sh           # Main bash entrypoint for bulk training loops
+├── shakespeare_data.py               # Dataset processing and tokenization logic
+├── train_transformer.py              # Core training loop for the Transformer
+└── transformer_model.py              # Definition of the Decoder-only architecture
 ```
-# check Tensorflow version
-python3 -c 'import tensorflow as tf; print(tf.__version__)'
 
-    
-# install tensorflow 2.3.0
-pip3 install --user Tensorflow==2.3.0
-```
-   
-### g++ 8
+## Running the Project
 
-```
-# Check g++ version
+### 1. Environment & Dependencies
+The framework requires TensorFlow 2.3.0, CUDA Toolkit 10.1, cuDNN 7.6.5, g++ 8.4, and Python 3.6 - 3.8.
+```bash
+# Check compiler and GPU mapping
 g++ -v
-    
-# install g++ version 8
-sudo apt -y install  g++-8 
-
-# add g++ 8 as an alternative g++
-sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-8 8
-
-# update default g++ to version    
-# Note: you must select the g++-8 from drop down
-sudo update-alternatives --config g++
-
-```    
-
-Note: Make sure your g++ version is greater than 5.4. Otherwise it may lead to a segmentation fault due to a known issue in [Tensorflow]().
-    
-    
-### CUDA Toolkit 10.1
-
-```
-# Check CUDA version
+python3 -c 'import tensorflow as tf; print(tf.__version__)'
 nvidia-smi
-```     
-Download CUDA 10.1 from [CUDA 10.1 archive](https://developer.nvidia.com/cuda-10.1-download-archive-base) and follow the steps in the CUDA documentation.
-    
-### cuDNN 7.6.5
 
-cuDNN is required for other tensorflow official layers, e.g., pooling.
-
-Download CuDNN from the [NVIDIA website](https://developer.nvidia.com/cudnn). Note that you will have to register for this. After downloading the tarball:
-
-```
-# decompress cuDNN
-tar -xvf cudnn-10.1-linux-x64-v7.6.5.32.tar.xz
-# copy to CUDA tool kit directory
-sudo cp cudnn-*-archive/include/cudnn*.h /usr/local/cuda/include 
-sudo cp -P cudnn-*-archive/lib/libcudnn* /usr/local/cuda/lib64 
-sudo chmod a+r /usr/local/cuda/include/cudnn*.h /usr/local/cuda/lib64/libcudnn*
-```
-
-Further details and alternative installation methods can be found [installation guide](https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html).
-
-## Supporting operands
-| Approximate Operator | Tensorflow equivalent | Gradient Computation | Status   |
-|----------------------|-----------------------|----------------------|----------|
-| AMConv2D             | Conv2D                | ✔                    | Complete |
-| denseam              | Dense                 | ✔                    | Complete |
-| MatMulAM             | MatMul                | ✔                    | Complete |
-| AMMHA                | MultiHeadAttention    | ✔                    | Complete |
-
-## Running Examples
-
-### Install tensorflow dataset (for MNIST)
-
-In our example, we use *tfds* package to load and preprocess the train/test images. Install *tfds* as:
-
-``
+# Install required python packages
 pip3 install --user tensorflow-datasets
-``
-
-### Clone the repository
-
 ```
-git clone https://github.com/AaronJing/ApproxTrain
-cd ApproxTrain
+*Note: A conda environment file `env_remote.yml` is provided for automatic environment setup.*
+
+### 2. Data Preparation
+The repository uses a character-level Shakespeare dataset. The data is automatically downloaded, cleaned, and tokenized by `shakespeare_data.py` upon initial run. The target vocabulary is ~65 unique characters.
+```bash
+python3 shakespeare_data.py
 ```
-### Compile the framework with AM Simulator
+*(See `figures/char_frequencies.png` for a visualization of the dataset distribution).*
 
-Warnings come from Tensorflow library could be safely ignored.
-    
-When building is sucessful, `convam_gpu.so` and 'denseam_gpu.so' file are created.
+### 3. Training and Testing Demo Scripts
 
-```
-make clean && make convam MULTIPLIER=AMSIMULATOR && make denseam_gpu.so MULTIPLIER=AMSIMULATOR
-```
-
-If you do not specify AMSIMULATOR, framework will be built with native hardware multiplication FP32 (* operator).
-
-### Using in-built approximate multipliers
-    
-    
-We provides two approximate multipliers, minimally biased multiplier (MBM) and Mitchell logarithm-based (MIT) approximate multiplier with different bit-widths as shown in the table below. (s, e, m) represents sign, exponent and mantissa. For lookup table-based (lut) AM Simulator, we support mantissa bit-width from 1 (16 Bytes) to 11 (16.8 Mb). For multipliers with mantissa bit-width greater or equal to 12, direct C simulation should be used and expect performance degradation. Note that, the number after underscore in column Generate LUT File Name is the mantissa bit-width, which is needed for ApproxTrain to initialize lookup table.
-    
-| Name 						 | Multiplier | Bit-width  |(s, e, m)   |LUT AM Simulator   |Generated LUT File Name   |
-|----------------------------|------------|------------|------------|------------|------------|
-| FMBM32_MULTIPLIER          | MBM        | 32         |(1, 8, 23)  |❌|❌|
-| FMBM16_MULTIPLIER          | MBM        | 16         |(1, 8, 7)   |✔|MBM_7.bin|
-| FMBM14_MULTIPLIER          | MBM        | 14         |(1, 8, 5)   |✔|MBM_5.bin|
-| FMBM12_MULTIPLIER          | MBM        | 12         |(1, 8, 3)   |✔|MBM_3.bin|
-| FMBM10_MULTIPLIER          | MBM        | 10         |(1, 8, 1)   |✔|MBM_1.bin|
-| MITCHEL23_MULTIPLIER       | MIT  | 32         |(1, 8, 23)  |❌|❌|
-| MITCHEL16_MULTIPLIER       | MIT   | 16         |(1, 8, 7)   |✔|MIT_7.bin|
-| MITCHEL14_MULTIPLIER       | MIT   | 14         |(1, 8, 5)   |✔|MIT_5.bin|
-| MITCHEL12_MULTIPLIER       | MIT   | 12         |(1, 8, 3)   |✔|MIT_3.bin|
-| MITCHEL10_MULTIPLIER       | MIT   | 10         |(1, 8, 1)   |✔|MIT_1.bin|
-
-Now generate binary LUT files for AMSimulator
-
+**To generate the C++ Multiplier Lookup Tables (LUTs):**
+The `AMSIMULATOR` backend relies on binary Lookup Table (LUT) files (`.bin`) to emulate the approximate math natively in hardware. You generate all supported LUTs simultaneously by calculating the matrix results and saving them via the generation script:
 ```bash
 cd lut
 ./lut_gen.sh
+cd ..
 ```
 
-### Example 1: MNIST Classification
-
-Launch the MNIST example script with your preferred approximate multiplier (e.g., FMBM16_MULTIPLIER) as:
-    
+**To compile the Custom TensorFlow C++ Operations:**
+You must compile the custom TF operations (`convam`, `denseam`, `matmulam`) with the `AMSIMULATOR` flag so they know to read the LUTs from disk. 
+**Note: You only need to compile the operations ONCE.** Because the C++ ops read the `.bin` files dynamically at runtime based on your python `--multiplier` argument, you do not need to recompile the C++ package if you decide to regenerate new LUTs or test out different multiplier modes.
 ```bash
-python3 mnist_example.py --mul="lut/MBM_7.bin"
-```    
+make clean && make convam MULTIPLIER=AMSIMULATOR && make denseam MULTIPLIER=AMSIMULATOR && make matmulam MULTIPLIER=AMSIMULATOR
+```
 
-You would expect 98% accuracy or higher, if everything works properly.
-
-### Example 2: Transformer Text Generation (Shakespeare)
-
-We provide a Transformer language model character-level text generation task on the Shakespeare dataset, supporting custom approximate operations (`AMMHA`, `denseam`, `matmulam`).
-
-Launch the training script with your preferred multiplier (e.g., `mbm_7`) as:
-
+**To train the Transformer:**
+You can train a single baseline natively using FP32, or using the 8-bit Posit emulator:
 ```bash
-python3 train_transformer.py --multiplier="mbm_7"
+python3 train_transformer.py --multiplier="fp32" --epochs=50
+python3 train_transformer.py --multiplier="pos8e1" --epochs=50
+```
+Alternatively, run the automated batch script to train all multiplier configs sequentially:
+```bash
+./run_posit_train_jobs.sh
 ```
 
-The script supports fp32 baseline as well as various MBM and Mitchell (MIT) multipliers (e.g., `fp32`, `mbm_7`, `mit_5`). It automatically handles the data pipeline, model building, and regularized training loop for the Decoder-only architecture.
- 
-If you are not sure about whether you are running GPU or not, run the following commands.
-
+**To evaluate the model (Inference Demo):**
+```bash
+python3 evaluate_model.py --multiplier="pos8e1"
+python3 generate_text.py --multiplier="pos8e1"
 ```
-python3 -c 'import tensorflow as tf; print(tf.test.gpu_device_name())'
-```
-  
-## For Developers    
 
-If you are interested in adding your own multiplier or your own dataset, please visit the [developers guide](developer.md).
-    
-## Troubleshooting
+## Key Project Results
+The table below summarizes the final validation metrics (Cross-Entropy Loss and Perplexity) attained on the Shakespeare dataset run for 50 epochs on the base architecture defined.
 
-TODO
+| Multiplier Type         | Precision | Val Loss | Val Perplexity | Training Stability |
+|-------------------------|-----------|----------|----------------|--------------------|
+| **Native (Baseline)**   | FP32      | ~1.38    | ~3.98         | High               |
+| **Posit (pos8e1)**      | 8-bit  (es=1)   |     ~2.36| ~10.63         | Low               |
+| **MBM (mbm_7)**         | FP Emul   | ~1.86    | ~6.45        | Medium             |
+| **Mitchell (mit_7)**    | FP Emul   | ~1.86   | ~6.43       | Medium                |
 
-## Acknowledgement
-Mitchell logarithm-based approximate multiplier: [Computer Multiplication and Division Using Binary Logarithms](https://ieeexplore.ieee.org/document/5219391)
 
-Minimally biased multipliers: [Minimally Biased Multipliers for Approximate Integer and Floating-Point Multiplication](https://ieeexplore.ieee.org/document/5219391)
+## Reference Information and Acknowledgments
+This project builds upon the original `ApproxTrain` framework and references state-of-the-art approximations for deep learning environments.
 
-Some code snippets have been taken from [tfapprox](https://github.com/ehw-fit/tf-approximate), [add custom operand to tensorflow](https://github.com/tensorflow/custom-op) and [tensorflow](https://github.com/tensorflow/tensorflow).
+* **Original ApproxTrain Framework & Minimally Biased Multipliers:** [ApproxTrain: Fast Simulation of Approximate Multipliers for DNN Training and Inference](https://ieeexplore.ieee.org/document/3253045) (Gong et al., 2023, IEEE TCAD).
+* **Posit Arithmetic Training (GANs):** "Posit Arithmetic for the Training and Deployment of Generative Adversarial Networks".
+* **MINOTAUR Accelerator:** "MINOTAUR: A Posit-Based 0.420–50-TOPS/W Edge Transformer Inference and Training Accelerator".
+* **Mitchell Logarithm-based multiplier:** "Computer Multiplication and Division Using Binary Logarithms".
 
-## Citing ApproxTrain
-If ApproxTrain helps you in your academic research, you are encouraged to cite our paper. 
-```
-@ARTICLE{approxtrain-tcad,
-  author={Gong, Jing and Saadat, Hassaan and Gamaarachchi, Hasindu and Javaid, Haris and Hu, Xiaobo Sharon and Parameswaran, Sri},
-  journal={IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems}, 
-  title={ApproxTrain: Fast Simulation of Approximate Multipliers for DNN Training and Inference}, 
-  year={2023},
-  volume={},
-  number={},
-  pages={1-1},
-  doi={10.1109/TCAD.2023.3253045}}
-```
+Some C++ TF-custom operation code snippets and Makefile logic were adapted from the official [tensorflow/custom-op](https://github.com/tensorflow/custom-op) guides.
