@@ -16,7 +16,7 @@ This repository is a fork of the original [ApproxTrain framework](https://github
 **Author's Contributions:**
 - Upgraded the deep learning backend to utilize the latest stable TensorFlow variants.
 - Expanded evaluation capabilities to support deep modern architectures, specifically **Decoder-only Transformers** on language modeling tasks.
-- Implemented and evaluated **8-bit Posit Arithmetic** simulated multipliers alongside the existing MBM and Mitchell baselines.
+- Integrated the official **SoftPosit C Library** to emulate exact, hardware-accurate **8-bit Posit Arithmetic** (both `pos8e0` fixed and `pos8e1` dynamic precision) simulated multipliers alongside the existing baselines.
 
 ## Directory Hierarchy
 ```text
@@ -115,6 +115,7 @@ The table below summarizes the final validation metrics (Cross-Entropy Loss and 
 This project builds upon the original `ApproxTrain` framework and references state-of-the-art approximations for deep learning environments.
 
 * **Original ApproxTrain Framework & Minimally Biased Multipliers:** [ApproxTrain: Fast Simulation of Approximate Multipliers for DNN Training and Inference](https://ieeexplore.ieee.org/document/3253045) (Gong et al., 2023, IEEE TCAD).
+* **SoftPosit Library:** [SoftPosit Posit Arithmetic Package](https://gitlab.com/cerlane/SoftPosit) by S. H. Leong (Cerlane) and John Gustafson.
 * **Posit Arithmetic Training (GANs):** "Posit Arithmetic for the Training and Deployment of Generative Adversarial Networks".
 * **MINOTAUR Accelerator:** "MINOTAUR: A Posit-Based 0.420–50-TOPS/W Edge Transformer Inference and Training Accelerator".
 * **Mitchell Logarithm-based multiplier:** "Computer Multiplication and Division Using Binary Logarithms".
