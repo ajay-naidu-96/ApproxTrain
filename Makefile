@@ -4,6 +4,15 @@ CXX      = g++
 CXXFLAGS += -g -Wall -O2 -std=c++17 -fPIC
 LDFLAGS  +=
 
+# SoftPosit — used for accurate posit8 es=0/es=1 conversions at runtime.
+# Platform header (platform.h) lives in the build directory.
+SOFTPOSIT_ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))SoftPosit
+SOFTPOSIT_INC  := $(SOFTPOSIT_ROOT)/source/include
+SOFTPOSIT_PLAT := $(SOFTPOSIT_ROOT)/build/Linux-x86_64-GCC
+# Collect all SoftPosit .c sources (exclude the optional 8086-SSE SIMD folder and macOS dotfiles).
+SOFTPOSIT_SRCS := $(shell find $(SOFTPOSIT_ROOT)/source -name '*.c' ! -name '.*' ! -path '*/8086-SSE/*')
+
+
 # Handle Multiplier Flag
 ifeq ($(MULTIPLIER),AMSIMULATOR)
     CPPFLAGS += -DAMSIMULATOR
@@ -36,6 +45,7 @@ ifeq ($(UNAME_S),Darwin)
     CPPFLAGS += -D_GLIBCXX_USE_CXX11_ABI=0
     # On Mac, we might need undefined dynamic_lookup for python symbols if not linking properly
     LDFLAGS += -undefined dynamic_lookup
+    # No SoftPosit on Mac (training runs on the Linux server)
     
     # Define objects (just replace .cc with .o)
     CONV_OBJS = $(CONV_SRCS:.cc=.o)
@@ -56,11 +66,14 @@ else
             CUDA_LIB ?= $(CUDA_ROOT)/lib
         endif
         
+        # Accurate posit8 runtime quantization via SoftPosit.
+        CXXFLAGS += -I$(SOFTPOSIT_INC) -I$(SOFTPOSIT_PLAT)
+        CUDA_CFLAGS += -I$(SOFTPOSIT_INC) -I$(SOFTPOSIT_PLAT)
+        
         # Add TF include paths to CUDA flags
         CUDA_CFLAGS += -g -std=c++17 -Xcompiler -Wall -Xcompiler -fPIC --expt-relaxed-constexpr -ccbin $(CXX) $(TF_CFLAGS) -I. -I.
         CUDA_LDFLAGS = -L$(CUDA_LIB) -lcudart
         
-        # Add CUDA sources
         # Add CUDA sources
         CONV_CUDA_SRCS = cuda/cuda_kernel.cu cuda/approx_mul_lut.cu
         DENSE_CUDA_SRCS = cuda/denseam_kernel.cu cuda/approx_mul_lut.cu
@@ -105,21 +118,21 @@ $(CONV_BINARY): $(CONV_OBJS)
 ifeq ($(UNAME_S),Darwin)
 	$(CXX) $(CXXFLAGS) -shared $(CONV_OBJS) $(LDFLAGS) -o $@
 else
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -shared $(CONV_OBJS) $(LDFLAGS) $(CUDA_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -shared $(CONV_OBJS) $(SOFTPOSIT_SRCS) $(LDFLAGS) $(CUDA_LDFLAGS) -lm -o $@
 endif
 
 $(DENSE_BINARY): $(DENSE_OBJS)
 ifeq ($(UNAME_S),Darwin)
 	$(CXX) $(CXXFLAGS) -shared $(DENSE_OBJS) $(LDFLAGS) -o $@
 else
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -shared $(DENSE_OBJS) $(LDFLAGS) $(CUDA_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -shared $(DENSE_OBJS) $(SOFTPOSIT_SRCS) $(LDFLAGS) $(CUDA_LDFLAGS) -lm -o $@
 endif
 
 $(MATMUL_BINARY): $(MATMUL_OBJS)
 ifeq ($(UNAME_S),Darwin)
 	$(CXX) $(CXXFLAGS) -shared $(MATMUL_OBJS) $(LDFLAGS) -o $@
 else
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -shared $(MATMUL_OBJS) $(LDFLAGS) $(CUDA_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -shared $(MATMUL_OBJS) $(SOFTPOSIT_SRCS) $(LDFLAGS) $(CUDA_LDFLAGS) -lm -o $@
 endif
 
 clean:

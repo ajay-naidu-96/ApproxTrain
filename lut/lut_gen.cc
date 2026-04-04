@@ -1,3 +1,13 @@
+// lut_gen.cc — LUT generator for ApproxTrain approximate multipliers.
+//
+// Compile with SoftPosit for posit8 LUTs (handled by lut_gen.sh):
+//   g++ -O2 -DPOSIT8E1 \
+//       -I../SoftPosit/source/include \
+//       -I../SoftPosit/build/Linux-x86_64-GCC \
+//       lut_gen.cc \
+//       $(find ../SoftPosit/source -name "*.c" ! -path "*/8086-SSE/*") \
+//       -o lut_gen && ./lut_gen
+
 #include <cstdio>
 #include <cstdint>
 #include <vector>
