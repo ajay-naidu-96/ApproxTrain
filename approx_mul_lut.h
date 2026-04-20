@@ -5,6 +5,7 @@
 #include <tensorflow/core/framework/op_kernel.h>
 #include "lut/posit8e0.inl"
 #include "lut/posit8e1.inl"
+#include "lut/posit8e2.inl"
 #ifdef GOOGLE_CUDA
 #include <cuda_runtime_api.h>
 #else
@@ -26,32 +27,35 @@ public:
       std::cerr << "no mant lut file name given" << std::endl;
       exit(1);
     }
-    if (mant_lut_file_name.find("POS8E0") != std::string::npos) {
+    if (mant_lut_file_name.find("POS") != std::string::npos) {
       use_posit_lut_ = true;
-      posit_es_ = 0;
-    } else if (mant_lut_file_name.find("POS8E1") != std::string::npos) {
-      use_posit_lut_ = true;
-      posit_es_ = 1;
-    } else {
-      use_posit_lut_ = false;
-      posit_es_ = -1;
-    }
+      // Extract ES
+      if (mant_lut_file_name.find("E0") != std::string::npos) posit_es_ = 0;
+      else if (mant_lut_file_name.find("E1") != std::string::npos) posit_es_ = 1;
+      else if (mant_lut_file_name.find("E2") != std::string::npos) posit_es_ = 2;
+      else posit_es_ = 1;
 
-    if (use_posit_lut_) {
-      mant_width_ = 8;
+      // Extract N (bit width) from "POS<N>E"
+      size_t pos = mant_lut_file_name.find("POS");
+      size_t end = mant_lut_file_name.find("E", pos);
+      if (pos != std::string::npos && end != std::string::npos) {
+          std::string n_str = mant_lut_file_name.substr(pos + 3, end - (pos + 3));
+          mant_width_ = std::stoi(n_str);
+      } else {
+          mant_width_ = 8;
+      }
+      
       a_shift_ = 0;
       b_shift_ = 0;
       mant_mask_ = 0;
       std::ifstream file(mant_lut_file_name, std::ios::in | std::ios::binary);
       if (file.fail()) {
-        std::cerr << "posit lut file read failed" << std::endl;
+        std::cerr << "posit lut file read failed: " << mant_lut_file_name << std::endl;
         exit(1);
       }
-      if (!file.is_open()) {
-        std::cerr << "posit lut file open failed" << std::endl;
-        exit(1);
-      }
-      posit_mul_lut_.resize(256 * 256);
+      
+      uint32_t num_entries = 1 << (mant_width_ * 2);
+      posit_mul_lut_.resize(num_entries);
       file.read(reinterpret_cast<char *>(posit_mul_lut_.data()),
                 posit_mul_lut_.size() * sizeof(float));
       return;
@@ -126,8 +130,19 @@ inline float posit_lut_mul_host(float a, float b, const float *lut) {
 }
 
 inline float posit_lut_mul_host_es(float a, float b, const float *lut, int es) {
-  uint8_t pa = es == 0 ? posit8e0_from_float(a) : posit8e1_from_float(a);
-  uint8_t pb = es == 0 ? posit8e0_from_float(b) : posit8e1_from_float(b);
+  uint8_t pa;
+  uint8_t pb;
+  if (es == 0) {
+      pa = posit8e0_from_float(a);
+      pb = posit8e0_from_float(b);
+  } else if (es == 1) {
+      pa = posit8e1_from_float(a);
+      pb = posit8e1_from_float(b);
+  } else {
+      pa = posit8e2_from_float(a);
+      pb = posit8e2_from_float(b);
+  }
+
   uint32_t idx = (uint32_t(pa) << 8) | uint32_t(pb);
   return lut[idx];
 }

@@ -16,7 +16,9 @@ This repository is a fork of the original [ApproxTrain framework](https://github
 **Author's Contributions:**
 - Upgraded the deep learning backend to utilize the latest stable TensorFlow variants.
 - Expanded evaluation capabilities to support deep modern architectures, specifically **Decoder-only Transformers** on language modeling tasks.
-- Integrated the official **SoftPosit C Library** to emulate exact, hardware-accurate **8-bit Posit Arithmetic** (both `pos8e0` fixed and `pos8e1` dynamic precision) simulated multipliers alongside the existing baselines.
+- Integrated the official **SoftPosit C Library** to emulate exact, hardware-accurate **8-bit Posit Arithmetic** (both `pos8e0` fixed and `pos8e1` dynamic precision).
+- **Recent Progress:** Added support for **Mitchell-approximated SoftPosit multipliers** (`posNeES_mit`), combining logarithmic approximation with Posit-based formats for enhanced efficiency.
+- **Automation:** Developed **multi-GPU batch training scripts** to evaluate diverse approximate configurations (bits 5-8, es 1-2) at scale.
 
 ## Directory Hierarchy
 ```text
@@ -41,7 +43,10 @@ ApproxTrain/
 ├── run_posit_train_jobs.sh           # Main bash entrypoint for bulk training loops
 ├── shakespeare_data.py               # Dataset processing and tokenization logic
 ├── train_transformer.py              # Core training loop for the Transformer
-└── transformer_model.py              # Definition of the Decoder-only architecture
+├── transformer_model.py              # Definition of the Decoder-only architecture
+├── run_mitchell_batch.sh             # Batch training script for Mitchell-Posit experiments
+└── docs/                             # Project reports, posters, and reference papers
+    └── Gopi_Capstone_Poster.pdf      # Visual overview of research and results
 ```
 
 ## Running the Project
@@ -89,9 +94,10 @@ You can train a single baseline natively using FP32, or using the 8-bit Posit em
 python3 train_transformer.py --multiplier="fp32" --epochs=50
 python3 train_transformer.py --multiplier="pos8e1" --epochs=50
 ```
-Alternatively, run the automated batch script to train all multiplier configs sequentially:
+Alternatively, run the automated batch scripts to train multiple configurations sequentially:
 ```bash
-./run_posit_train_jobs.sh
+./run_posit_train_jobs.sh    # Standard 8-bit Posit baselines
+./run_mitchell_batch.sh      # Mitchell-approximated SoftPosit variants (5-8 bits)
 ```
 
 **To evaluate the model (Inference Demo):**
@@ -116,6 +122,7 @@ This project builds upon the original `ApproxTrain` framework and references sta
 
 * **Original ApproxTrain Framework & Minimally Biased Multipliers:** [ApproxTrain: Fast Simulation of Approximate Multipliers for DNN Training and Inference](https://ieeexplore.ieee.org/document/3253045) (Gong et al., 2023, IEEE TCAD).
 * **SoftPosit Library:** [SoftPosit Posit Arithmetic Package](https://gitlab.com/cerlane/SoftPosit) by S. H. Leong (Cerlane) and John Gustafson.
+* **Research Poster:** [Capstone Project Poster (Visual Overview)](docs/Gopi_Capstone_Poster.pdf).
 * **Posit Arithmetic Training (GANs):** "Posit Arithmetic for the Training and Deployment of Generative Adversarial Networks".
 * **MINOTAUR Accelerator:** "MINOTAUR: A Posit-Based 0.420–50-TOPS/W Edge Transformer Inference and Training Accelerator".
 * **Mitchell Logarithm-based multiplier:** "Computer Multiplication and Division Using Binary Logarithms".

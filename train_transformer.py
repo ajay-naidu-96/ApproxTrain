@@ -341,10 +341,7 @@ def main():
     
     # Multiplier configuration
     parser.add_argument('--multiplier', type=str, default='fp32',
-                       choices=['fp32', 'mbm_7', 'mbm_5', 'mbm_3', 'mbm_1',
-                               'mit_7', 'mit_5', 'mit_3', 'mit_1',
-                               'pos8e0', 'pos8e1'],
-                       help='Multiplier type to use')
+                       help='Multiplier type to use (e.g., fp32, pos8e1, pos5e1_mit, mbm_7)')
     
     # Training configuration
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
@@ -367,14 +364,20 @@ def main():
     # Create configuration
     if args.multiplier == 'fp32':
         config = Config.create_fp32_config()
-    elif args.multiplier == 'pos8e0':
-        lut_file = "lut/POS8E0_8.bin"
-        config = Config.create_approximate_config(lut_file, "POS8E0")
-    elif args.multiplier == 'pos8e1':
-        lut_file = "lut/POS8E1_8.bin"
-        config = Config.create_approximate_config(lut_file, "POS8E1")
+    elif args.multiplier.startswith('pos') and 'e' in args.multiplier:
+        # Handle formats like pos8e1, pos5e1_mit, etc.
+        parts = args.multiplier.split('_')
+        base_name = parts[0].upper() # e.g., POS8E1
+        is_mitchell = len(parts) > 1 and parts[1].lower() == 'mit'
+        
+        lut_name = base_name
+        if is_mitchell:
+            lut_name += "_MIT"
+        
+        lut_file = f"lut/{lut_name}.bin"
+        config = Config.create_approximate_config(lut_file, lut_name)
     else:
-        # Parse multiplier name
+        # Parse multiplier name for other types like mbm_7
         mul_type, bits = args.multiplier.split('_')
         lut_file = f"lut/{mul_type.upper()}_{bits}.bin"
         config = Config.create_approximate_config(lut_file, args.multiplier.upper())
