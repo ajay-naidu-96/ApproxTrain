@@ -71,7 +71,7 @@ else
         CUDA_CFLAGS += -I$(SOFTPOSIT_INC) -I$(SOFTPOSIT_PLAT)
         
         # Add TF include paths to CUDA flags
-        CUDA_CFLAGS += -g -std=c++17 -Xcompiler -Wall -Xcompiler -fPIC --expt-relaxed-constexpr -ccbin $(CXX) $(TF_CFLAGS) -I. -I.
+        CUDA_CFLAGS += -g -std=c++17 -Xcompiler -Wall -Xcompiler -fPIC --expt-relaxed-constexpr -ftz=true -ccbin $(CXX) $(TF_CFLAGS) -I. -I.
         CUDA_LDFLAGS = -L$(CUDA_LIB) -lcudart
         
         # Add CUDA sources

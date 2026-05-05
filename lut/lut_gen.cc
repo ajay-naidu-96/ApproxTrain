@@ -20,6 +20,7 @@
 #include <cmath>
 #include "posit8e0.inl"
 #include "posit8e1.inl"
+#include "posit8e2.inl"
 void floatToBinary(float f, std::string& str)
 {
 
@@ -87,13 +88,37 @@ void floatToBinary(float f, std::string& str)
     #define MULTIPLY(a,b) 0;
     #define MANTISSA_BITWIDTH 7
     std::string lut_save = "ZEROS_7.bin";
+#elif defined(POSIT_N)
+    #define POSIT_LUT
+    #ifndef POSIT_ES
+      #define POSIT_ES 1
+    #endif
+    #ifdef MITCHELL_APPROX
+      #include "Mitchell_16.inl"
+      #define MULTIPLY(a,b) FPmultMitch_fast16((a),(b))
+      std::string lut_save = "POS" + std::to_string(POSIT_N) + "E" + std::to_string(POSIT_ES) + "_MIT.bin";
+    #else
+      #define MULTIPLY(a,b) ((a)*(b))
+      std::string lut_save = "POS" + std::to_string(POSIT_N) + "E" + std::to_string(POSIT_ES) + ".bin";
+    #endif
 #elif POSIT8E1
     #define POSIT_LUT
+    #define POSIT_N 8
+    #define POSIT_ES 1
+    #define MULTIPLY(a,b) ((a)*(b))
     std::string lut_save = "POS8E1_8.bin";
 #elif POSIT8E0
     #define POSIT_LUT
+    #define POSIT_N 8
     #define POSIT_ES 0
+    #define MULTIPLY(a,b) ((a)*(b))
     std::string lut_save = "POS8E0_8.bin";
+#elif POSIT8E2
+    #define POSIT_LUT
+    #define POSIT_N 8
+    #define POSIT_ES 2
+    #define MULTIPLY(a,b) ((a)*(b))
+    std::string lut_save = "POS8E2_8.bin";
 #endif
 
 #define EMPTYFP32 0x00000000
@@ -104,25 +129,65 @@ void floatToBinary(float f, std::string& str)
 // implementation for approximate mantissa multiplications lookup table generation
 int main(){
 #ifdef POSIT_LUT
-    // POSIT LUT: maps (posit8, posit8) -> float (rounded via posit)
+    // POSIT LUT: maps (positN, positN) -> float (rounded via posit)
+    int nbits = POSIT_N;
+    int es = POSIT_ES;
+    uint32_t size = 1 << nbits;
     std::vector<float> lut;
-    lut.resize(256 * 256);
-    for (uint32_t a = 0; a < 256; ++a) {
-        for (uint32_t b = 0; b < 256; ++b) {
-#if defined(POSIT_ES) && POSIT_ES == 0
-            float va = posit8e0_to_float(static_cast<uint8_t>(a));
-            float vb = posit8e0_to_float(static_cast<uint8_t>(b));
-            float prod = va * vb;
-            uint8_t pc = posit8e0_from_float(prod);
-            float out = posit8e0_to_float(pc);
-#else
-            float va = posit8e1_to_float(static_cast<uint8_t>(a));
-            float vb = posit8e1_to_float(static_cast<uint8_t>(b));
-            float prod = va * vb;
-            uint8_t pc = posit8e1_from_float(prod);
-            float out = posit8e1_to_float(pc);
-#endif
-            lut[(a << 8) | b] = out;
+    lut.resize(size * size);
+    
+    for (uint32_t a = 0; a < size; ++a) {
+        for (uint32_t b = 0; b < size; ++b) {
+            float va, vb;
+            
+            // Generic approach using PX1/PX2
+            double da, db;
+            if (es == 1) {
+                posit_1_t pa; pa.v = ((uint32_t)a) << (32 - nbits);
+                posit_1_t pb; pb.v = ((uint32_t)b) << (32 - nbits);
+                da = convertPX1ToDouble(pa);
+                db = convertPX1ToDouble(pb);
+            } else if (es == 2) {
+                posit_2_t pa; pa.v = ((uint32_t)a) << (32 - nbits);
+                posit_2_t pb; pb.v = ((uint32_t)b) << (32 - nbits);
+                da = convertPX2ToDouble(pa);
+                db = convertPX2ToDouble(pb);
+            } else { // es = 0
+                va = posit8e0_to_float(static_cast<uint8_t>(a << (8-nbits)));
+                vb = posit8e0_to_float(static_cast<uint8_t>(b << (8-nbits)));
+                da = va; db = vb;
+            }
+            
+            if (es != 0) {
+                va = (float)da;
+                vb = (float)db;
+            }
+
+            float prod = MULTIPLY(va, vb);
+            
+            // Prevent NaNs in LUT by checking for Inf/NaN from multiplier
+            if (std::isnan(prod) || std::isinf(prod)) {
+                // Clip to a very large but finite value
+                if (prod > 0) prod = 1e30f; 
+                else prod = -1e30f;
+            }
+
+            float out;
+            if (es == 1) {
+                posit_1_t pc = convertDoubleToPX1((double)prod, nbits);
+                out = (float)convertPX1ToDouble(pc);
+            } else if (es == 2) {
+                posit_2_t pc = convertDoubleToPX2((double)prod, nbits);
+                out = (float)convertPX2ToDouble(pc);
+            } else {
+                uint8_t pc_bits = posit8e0_from_float(prod);
+                out = posit8e0_to_float(pc_bits);
+            }
+            
+            // Final safety check: if 'out' is still NaN (NaR), force to 0 or max representable
+            if (std::isnan(out)) out = 0.0f; 
+
+            lut[(a << nbits) | b] = out;
         }
     }
     char *lut_save_name = &lut_save[0];

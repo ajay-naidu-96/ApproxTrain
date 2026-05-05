@@ -233,14 +233,19 @@ class Trainer:
                                     self.optimizer.learning_rate,
                                     step=self.global_step)
             
-            # Generate samples
+            # Generate samples (skip if logits are NaN to avoid tf.random.categorical hang)
             if self.global_step % self.config.training.sample_freq == 0:
-                sample = self.generate_sample()
-                print(f"\n{'='*80}")
-                print(f"Sample at step {self.global_step}:")
-                print(f"{'='*80}")
-                print(sample)
-                print(f"{'='*80}\n")
+                dummy_input = tf.zeros((1, self.config.data.sequence_length), dtype=tf.int32)
+                dummy_logits = self.model(dummy_input, training=False)
+                if tf.math.reduce_any(tf.math.is_nan(dummy_logits)):
+                    print(f"\n[Step {self.global_step}] Skipping sample generation: NaN logits detected (model diverging)")
+                else:
+                    sample = self.generate_sample()
+                    print(f"\n{'='*80}")
+                    print(f"Sample at step {self.global_step}:")
+                    print(f"{'='*80}")
+                    print(sample)
+                    print(f"{'='*80}\n")
         
         epoch_time = time.time() - epoch_start
         tokens_per_sec = total_tokens / epoch_time

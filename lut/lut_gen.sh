@@ -34,6 +34,7 @@ NON_POSIT_MULTIPLIERS=(
 POSIT_MULTIPLIERS=(
     "POSIT8E0"
     "POSIT8E1"
+    "POSIT8E2"
 )
 
 echo "=== Building non-posit LUTs ==="
